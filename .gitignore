@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.pytest_cache/
+.idea/
+.vscode/
+# Datos generados del Data Lake (no se suben a Git)
+datalake/raw/*
+datalake/processed/*
+datalake/curated/*
+datalake/_checkpoints/
+!datalake/**/.gitkeep
+airflow/logs/

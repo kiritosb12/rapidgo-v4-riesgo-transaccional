@@ -1,0 +1,6 @@
+# Semana 1: validación del contrato del evento
+pytest>=8.0
+jsonschema>=4.21
+# Semana 2 (quitar el # al implementar):
+# kafka-python-ng>=2.2
+# pyspark>=4.0
