@@ -92,13 +92,13 @@ docker compose down
 ## Documentación
 - Indicadores y alertas: [`docs/kpis_y_alertas.md`](docs/kpis_y_alertas.md)
 - Registros de decisiones de arquitectura (ADR): [`docs/decisions/`](docs/decisions/)
-- Puntos de control semanales: `docs/checkpoints/` (el de la Semana 1 se agrega con el Issue #7)
+- Puntos de control semanales: [Semana 1](docs/checkpoints/semana1.md)
 
 ## Contribuciones (Semana 1)
 | Integrante | Trabajo realizado | Pull Requests propios | Revisiones aprobadas |
 |---|---|---|---|
-| Esteban Rueda | Indicadores y reglas de alerta (#3), topic, clave, particiones y ADR-001 (#4), contrato JSON y ejemplos (#2) | #23, #24, #26 | #22, #25 |
-| Oscar Becerra | Estructura del repositorio (#1), docker-compose preliminar (#6), arquitectura y README (#5), punto de control y versión (#7) | #22, #25, #27 | #23, #24, #26 |
+| Esteban Rueda | Indicadores y reglas de alerta (#3), topic, clave, particiones y ADR-001 (#4), contrato JSON y ejemplos (#2) | #23, #24, #26 | #22, #25, #27 |
+| Oscar Becerra | Estructura del repositorio (#1), docker-compose preliminar (#6), arquitectura y README (#5), corrección del esquema y prueba del contrato (#2), punto de control y versión (#7) | #22, #25, #27, #28, #29 | #23, #24, #26 |
 | Karol Perez | — | — | — |
 
 _Se actualizará cada semana. Enlace al video final: pendiente (Semana 4)._
