@@ -1,0 +1,21 @@
+{
+  "id_evento": "c41b9e77-0a2d-4f18-b6c3-91e5d2a7f003",
+  "tipo_evento": "intento_pago",
+  "version_esquema": "1.0",
+  "equipo": "equipo9-v4",
+  "fecha_evento": "2026-10-22T03:12:48.902Z",
+  "id_pedido": "PED-20261022-000391",
+  "id_cliente": "CLI-004410",
+  "valor": 1250000.0,
+  "moneda": "COP",
+  "medio_pago": "tarjeta_credito",
+  "id_dispositivo": "DIS-e90b44",
+  "tipo_dispositivo": "web",
+  "pais_ip": "VE",
+  "ciudad": "Bogota",
+  "latitud": 4.7110,
+  "longitud": -74.0721,
+  "numero_intento": 4,
+  "estado": "rechazado",
+  "motivo_rechazo": "fondos_insuficientes"
+}

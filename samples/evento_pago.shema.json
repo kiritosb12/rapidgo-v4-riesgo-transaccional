@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rapidgo/v4/intento_pago/1.0",
+  "title": "RapidGo V4 - Intento de pago",
+  "description": "Contrato del evento publicado en el topic rapidgo.v4.pagos.intentos. Clave (key) de Kafka = id_pedido.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id_evento", "tipo_evento", "version_esquema", "equipo", "fecha_evento",
+    "id_pedido", "id_cliente", "valor", "moneda", "medio_pago",
+    "id_dispositivo", "tipo_dispositivo", "pais_ip", "numero_intento", "estado"
+  ],
+  "properties": {
+    "id_evento":        { "type": "string", "format": "uuid", "description": "Identificador único del evento (sirve para eliminar duplicados)." },
+    "tipo_evento":      { "const": "intento_pago" },
+    "version_esquema":  { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+    "equipo":           { "const": "equipo9-v4", "description": "Identifica los eventos del equipo." },
+    "fecha_evento":     { "type": "string", "format": "date-time", "description": "Momento del intento (UTC, ISO-8601). Es el tiempo del evento en Spark." },
+    "id_pedido":        { "type": "string", "pattern": "^PED-\\d{8}-\\d{6}$", "description": "Pedido. Es la clave (key) del mensaje en Kafka." },
+    "id_cliente":       { "type": "string", "pattern": "^CLI-\\d{6}$" },
+    "valor":            { "type": "number", "exclusiveMinimum": 0, "maximum": 20000000, "description": "Valor del pago en pesos colombianos." },
+    "moneda":           { "const": "COP" },
+    "medio_pago":       { "enum": ["tarjeta_credito", "tarjeta_debito", "pse", "nequi", "daviplata", "efectivo"] },
+    "id_dispositivo":   { "type": "string", "pattern": "^DIS-[0-9a-f]{6}$" },
+    "tipo_dispositivo": { "enum": ["android", "ios", "web"] },
+    "pais_ip":          { "type": "string", "pattern": "^[A-Z]{2}$", "description": "País de la dirección IP (código ISO de dos letras)." },
+    "ciudad":           { "type": ["string", "null"] },
+    "latitud":          { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+    "longitud":         { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
+    "numero_intento":   { "type": "integer", "minimum": 1, "maximum": 20, "description": "Número de intento de pago dentro del mismo pedido." },
+    "estado":           { "enum": ["aprobado", "rechazado", "pendiente"] },
+    "motivo_rechazo":   { "type": ["string", "null"], "enum": [null, "fondos_insuficientes", "tarjeta_invalida", "tiempo_agotado_banco", "sospecha_fraude", "otp_incorrecto"] }
+  }
+}
