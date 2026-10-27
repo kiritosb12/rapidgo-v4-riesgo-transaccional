@@ -1,0 +1,8 @@
+.git
+.github
+datalake
+docs
+tests
+**/__pycache__
+.venv
+venv
