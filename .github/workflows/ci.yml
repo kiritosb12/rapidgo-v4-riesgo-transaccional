@@ -1,0 +1,42 @@
+# Integración continua — RapidGo V4 (Riesgo transaccional)
+# Se ejecuta en cada push a main/develop, en cada Pull Request hacia main y a mano (workflow_dispatch).
+name: CI RapidGo
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configurar Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Configurar Java 17 (lo necesita Spark para las pruebas)
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Validar sintaxis Python
+        run: python -m compileall -q producer spark tests scripts
+
+      - name: Ejecutar pruebas
+        run: pytest -v
+
+      - name: Validar Docker Compose
+        run: docker compose config --quiet
