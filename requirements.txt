@@ -1,6 +1,7 @@
-# Semana 1: validación del contrato del evento
+# Dependencias del proyecto (las mismas en el computador, en Docker y en GitHub Actions)
 pytest>=8.0
 jsonschema>=4.21
-# Semana 2 (quitar el # al implementar):
-# kafka-python-ng>=2.2
-# pyspark>=4.0
+# Productor Kafka (cliente oficial basado en librdkafka; soporta acks=all e idempotencia)
+confluent-kafka==2.16.0
+# Spark Structured Streaming. Si cambia esta versión, cambie también VERSION_SPARK_KAFKA en spark/streaming_pagos.py
+pyspark==4.1.3

@@ -13,3 +13,9 @@ datalake/curated/*
 datalake/_checkpoints/
 !datalake/**/.gitkeep
 airflow/logs/
+# Spark local
+spark-warehouse/
+metastore_db/
+derby.log
+# Registros de lotes y resúmenes de métricas
+datalake/_metricas/
