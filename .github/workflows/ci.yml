@@ -35,8 +35,11 @@ jobs:
       - name: Validar sintaxis Python
         run: python -m compileall -q producer spark tests scripts
 
-      - name: Ejecutar pruebas
+      - name: Ejecutar pruebas (contrato, reglas, productor y Spark)
         run: pytest -v
+
+      - name: Probar el productor sin Kafka (20 eventos validados contra el contrato)
+        run: python -m producer.productor_pagos --modo-seco --max-eventos 20 --eventos-por-segundo 100 --semilla 1
 
       - name: Validar Docker Compose
         run: docker compose config --quiet
