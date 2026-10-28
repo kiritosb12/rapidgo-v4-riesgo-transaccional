@@ -4,6 +4,9 @@ Lee el topic rapidgo.v4.pagos.intentos y escribe el Data Lake en Parquet:
 
     datalake/raw/pagos/                         mensaje original + partición/offset
     datalake/processed/pagos/                   evento limpio, sin duplicados, con señales y puntaje
+    datalake/curated/kpis_1min/                 indicadores K1–K4 por ventana de 1 minuto
+    datalake/curated/alertas_multiples_intentos/  alerta A1
+    datalake/curated/alertas_senales_combinadas/  alerta A2
     datalake/_checkpoints/<consulta>/            offsets y estado de cada consulta
     datalake/_metricas/progreso_streaming.jsonl  duración y filas de cada lote (evidencia para ADR-002)
 
@@ -29,6 +32,7 @@ from pathlib import Path
 from pyspark.sql import DataFrame, SparkSession
 
 from spark import transformaciones as T
+from spark import indicadores_alertas as IA
 
 VERSION_SPARK_KAFKA = "org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.3"   # debe coincidir con pyspark
 
@@ -116,6 +120,11 @@ def construir_consultas(df_fuente: DataFrame, cfg: Configuracion) -> list:
     consultas = [
         _escribir(T.a_raw(df_fuente), "raw_pagos", cfg.ruta("raw", "pagos"), cfg, "fecha"),
         _escribir(procesado, "processed_pagos", cfg.ruta("processed", "pagos"), cfg, "fecha"),
+        _escribir(IA.indicadores_por_minuto(procesado), "kpis_1min", cfg.ruta("curated", "kpis_1min"), cfg),
+        _escribir(IA.alertas_multiples_intentos(procesado), "alertas_multiples_intentos",
+                  cfg.ruta("curated", "alertas_multiples_intentos"), cfg),
+        _escribir(IA.alertas_senales_combinadas(procesado), "alertas_senales_combinadas",
+                  cfg.ruta("curated", "alertas_senales_combinadas"), cfg),
     ]
     return consultas
 

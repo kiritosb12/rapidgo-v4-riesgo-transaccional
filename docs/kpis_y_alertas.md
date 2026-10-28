@@ -2,6 +2,10 @@
 
 > Umbrales **iniciales** (Semana 1). Se ajustarán en la Semana 2 con los valores reales observados
 > en la ejecución y el cambio quedará registrado en el ADR-002.
+>
+> **Implementación (Semana 2):** los umbrales viven en un solo lugar, [`spark/reglas.py`](../spark/reglas.py).
+> Las señales y el puntaje se calculan en [`spark/transformaciones.py`](../spark/transformaciones.py); los
+> indicadores y las alertas, en [`spark/indicadores_alertas.py`](../spark/indicadores_alertas.py).
 
 ## Señales de riesgo por evento (Spark las calcula evento por evento, sin estado)
 
@@ -44,6 +48,20 @@ de tarjetas. El horario nocturno pesa poco porque, por sí solo, es normal (hay 
 - **Justificación:** se exige la combinación de al menos dos señales para no alertar por un solo factor
   (por ejemplo, un pedido grande legítimo). Ejemplo: `samples/evento_pago_anomalo.json` → S1 + S2 + S3 = 75 → alerta MEDIA.
 
-## Salida de las alertas
-Se guardan en `datalake/curated/alertas/` (Parquet) con: `tipo_alerta, severidad, id_pedido, id_cliente,
-inicio_ventana, fin_ventana, puntaje_riesgo, detalle, fecha_deteccion`.
+> Nota: como ningún peso llega a 60 por sí solo, `puntaje_riesgo >= 60` ya implica al menos 2 señales; la
+> condición `senales_riesgo >= 2` se mantiene para que la regla siga siendo correcta si se cambian los pesos.
+
+## Salida de los indicadores y las alertas
+| Salida | Ruta (Parquet) | Columnas principales |
+|---|---|---|
+| Indicadores | `datalake/curated/kpis_1min/` | `inicio_ventana, fin_ventana, intentos, pedidos, k1_intentos_por_pedido, max_numero_intento, k2_valor_promedio, valor_promedio_<medio>, k3_eventos_riesgo, k3_porcentaje_riesgo, k4_tasa_rechazo, fecha_calculo` |
+| A1 | `datalake/curated/alertas_multiples_intentos/` | `tipo_alerta, severidad, id_pedido, id_cliente, inicio_ventana, fin_ventana, intentos, rechazos, puntaje_riesgo, detalle, fecha_deteccion` |
+| A2 | `datalake/curated/alertas_senales_combinadas/` | mismas columnas; `inicio_ventana = fin_ventana = fecha_evento` y `detalle` con las señales, el intento, el valor y el país |
+
+Las dos alertas tienen las mismas columnas para poder unirlas en un solo reporte (Airflow, Semana 3).
+Van en carpetas separadas porque dos consultas continuas de Spark no pueden escribir en la misma ruta.
+
+**Cuándo aparece cada resultado:** las ventanas se escriben en modo *append*, es decir, solo cuando la marca de
+agua supera el fin de la ventana. Con una marca de agua de 10 minutos, un indicador de 1 minuto aparece unos
+11 minutos después y una alerta A1 hasta 15 minutos después. La alerta A2 no tiene ventana y aparece en el
+siguiente lote (unos segundos).
