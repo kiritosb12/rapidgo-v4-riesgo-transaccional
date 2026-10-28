@@ -1,6 +1,6 @@
 # RapidGo V4 - Riesgo transaccional
 # Semana 1 (preliminar): Kafka en modo KRaft (sin Zookeeper) + creación del topic + Kafka UI.
-# Semana 2: se agregan Spark y el productor de eventos.
+# Semana 2: productor de eventos y Spark Structured Streaming (imagen propia, ver Dockerfile).
 # Semana 3: se agregan PostgreSQL y Airflow (servidor web y planificador).
 
 name: rapidgo-v4
@@ -60,3 +60,56 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: rapidgo-v4
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+
+  # ---------------------------------------------------------------- Semana 2
+  # Trabajo de Spark: Kafka → datalake/raw, processed y curated (Parquet + checkpoints).
+  spark:
+    build: .
+    image: rapidgo-v4-app
+    container_name: rg4-spark
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    command: ["python", "-m", "spark.streaming_pagos"]
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_TOPIC: rapidgo.v4.pagos.intentos
+      RUTA_DATALAKE: /app/datalake
+      INICIO_OFFSETS: earliest
+      INTERVALO_LOTE: ${INTERVALO_LOTE:-10 seconds}
+      RETRASO_MAXIMO: ${RETRASO_MAXIMO:-10 minutes}
+      SPARK_DRIVER_MEMORY: 1g
+      SPARK_IVY_DIR: /root/.ivy2        # caché del conector de Kafka descargado de Maven
+    ports:
+      - "4040:4040"                     # interfaz web de Spark (pestaña Structured Streaming)
+    volumes:
+      - ./datalake:/app/datalake
+      - ./spark:/app/spark:ro           # el código se lee de la carpeta: no hay que reconstruir al editar
+      - ./scripts:/app/scripts:ro
+      - spark-ivy:/root/.ivy2
+
+  # Productor de intentos de pago (clave id_pedido, ~5 % de pedidos anómalos).
+  productor:
+    image: rapidgo-v4-app
+    container_name: rg4-productor
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      spark:
+        condition: service_started
+    command: >
+      python -m producer.productor_pagos
+      --eventos-por-segundo ${EVENTOS_POR_SEGUNDO:-10}
+      --duracion ${DURACION_PRODUCTOR:-0}
+      --resumen /app/datalake/_metricas/productor_resumen.json
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_TOPIC: rapidgo.v4.pagos.intentos
+    volumes:
+      - ./datalake:/app/datalake
+      - ./producer:/app/producer:ro
+      - ./samples:/app/samples:ro
+    restart: "no"
+
+volumes:
+  spark-ivy:
