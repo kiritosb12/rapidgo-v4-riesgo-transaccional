@@ -16,7 +16,7 @@ Uso (dentro de Docker Compose):
 
 Parámetros por variables de entorno (o argumentos, ver --help):
     KAFKA_BOOTSTRAP=kafka:9092  KAFKA_TOPIC=rapidgo.v4.pagos.intentos  RUTA_DATALAKE=/app/datalake
-    INICIO_OFFSETS=earliest  INTERVALO_LOTE="10 seconds"  RETRASO_MAXIMO="10 minutes"
+    INICIO_OFFSETS=earliest  INTERVALO_LOTE="10 seconds"  RETRASO_MAXIMO="2 minutes" (ADR-002)
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ def leer_configuracion(argv=None) -> Configuracion:
     p.add_argument("--ruta-datalake", default=e("RUTA_DATALAKE", str(Path(__file__).resolve().parents[1] / "datalake")))
     p.add_argument("--inicio-offsets", default=e("INICIO_OFFSETS", "earliest"), choices=["earliest", "latest"])
     p.add_argument("--intervalo-lote", default=e("INTERVALO_LOTE", "10 seconds"))
-    p.add_argument("--retraso-maximo", default=e("RETRASO_MAXIMO", "10 minutes"),
+    p.add_argument("--retraso-maximo", default=e("RETRASO_MAXIMO", "2 minutes"),   # ADR-002
                    help="marca de agua (watermark) sobre fecha_evento")
     p.add_argument("--max-offsets-por-lote", type=int, default=int(e("MAX_OFFSETS_POR_LOTE", "0")))
     p.add_argument("--duracion", type=int, default=int(e("DURACION_SEGUNDOS", "0")), help="0 = sin límite")
