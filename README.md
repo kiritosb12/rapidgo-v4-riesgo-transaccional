@@ -1,5 +1,7 @@
 # RapidGo · Variante 4 — Riesgo transaccional
 
+[![CI RapidGo](https://github.com/kiritosb12/rapidgo-v4-riesgo-transaccional/actions/workflows/ci.yml/badge.svg)](https://github.com/kiritosb12/rapidgo-v4-riesgo-transaccional/actions/workflows/ci.yml)
+
 Flujo de datos Big Data de extremo a extremo para detectar **comportamientos atípicos durante los pagos y pedidos** de RapidGo.
 Proyecto final — Línea de Profundización I (Big Data) · Ingeniería de Sistemas y Computación · Universidad de Cundinamarca, Facatativá.
 
@@ -8,7 +10,7 @@ Proyecto final — Línea de Profundización I (Big Data) · Ingeniería de Sist
 | **Equipo** | 9 |
 | **Integrantes** | Esteban Rueda ([@jers120506-gif](https://github.com/jers120506-gif)) · Oscar Becerra ([@kiritosb12](https://github.com/kiritosb12)) · Karol Perez ([@Karitoperez](https://github.com/Karitoperez)) |
 | **Variante** | 4 — Riesgo transaccional |
-| **Versión actual** | `v0.1.0-foundation` (Semana 1 · diseño y organización) |
+| **Versión actual** | `v0.2.0-streaming` (Semana 2 · flujo funcional e integración continua) |
 | **Tablero Kanban** | [RapidGo V4 – Kanban](https://github.com/users/kiritosb12/projects/2) (20 Issues, Semanas 1 a 4) |
 
 ## Problema de negocio
@@ -67,19 +69,66 @@ Detalle completo en [docs/kpis_y_alertas.md](docs/kpis_y_alertas.md).
 | A1 `MULTIPLES_INTENTOS` | mismo `id_pedido` con 3 o más intentos, o 2 o más rechazos, en 5 minutos |
 | A2 `SENALES_COMBINADAS` | `puntaje_riesgo >= 60` con al menos 2 señales (valor ≥ 500.000, IP fuera de Colombia, intento ≥ 3, rechazo sospechoso, entre las 00 y las 05 h) |
 
-## Ejecución local (estado de la Semana 1)
-Requisitos: Docker Desktop (con al menos 6 GB de memoria asignados), Git y Python 3.12 o superior.
+## Ejecución local (Semana 2)
+Requisitos: Docker Desktop con **al menos 6 GB de memoria** asignados, Git y, para correr las pruebas en el
+computador, Python 3.12+ y Java 17+ (opcional: sin Java las pruebas de Spark se omiten).
 
 ```bash
 git clone https://github.com/kiritosb12/rapidgo-v4-riesgo-transaccional.git
 cd rapidgo-v4-riesgo-transaccional
-docker compose up -d                 # Kafka + creación del topic + Kafka UI
-docker compose logs kafka-init       # debe mostrar PartitionCount: 3
-# Kafka UI: http://localhost:8080
-pip install -r requirements.txt
-pytest -v                            # valida el contrato del evento
-docker compose down
+docker compose up -d --build          # Kafka + topic + Kafka UI + Spark + productor
+docker compose logs kafka-init        # debe mostrar PartitionCount: 3
+docker compose logs -f spark          # lotes de cada consulta (la 1.ª vez descarga el conector de Kafka)
 ```
+
+| Servicio | Qué hace | Acceso |
+|---|---|---|
+| `kafka` / `kafka-init` | Broker KRaft y creación del topic con 3 particiones | `localhost:29092` |
+| `kafka-ui` | Ver mensajes, particiones y offsets | http://localhost:8080 |
+| `spark` | 5 consultas continuas → `datalake/` | http://localhost:4040 (pestaña *Structured Streaming*) |
+| `productor` | ~10 eventos/s; termina si se define `DURACION_PRODUCTOR` | `docker compose logs productor` |
+
+Parámetros (variables de entorno al levantar): `EVENTOS_POR_SEGUNDO` (10), `DURACION_PRODUCTOR` (0 = sin
+límite), `INTERVALO_LOTE` (`10 seconds`), `RETRASO_MAXIMO` (marca de agua, ver ADR-002). Ejemplo:
+
+```bash
+EVENTOS_POR_SEGUNDO=20 DURACION_PRODUCTOR=900 docker compose up -d --build   # 15 minutos a 20 eventos/s
+```
+
+Ver los resultados y medir la ejecución:
+
+```bash
+docker compose run --rm --no-deps spark python scripts/metricas_semana2.py   # tablas Markdown con valores reales
+docker compose stop productor spark                                 # detener (el checkpoint guarda el avance)
+docker compose down                                                 # apagar todo
+```
+
+## Pruebas e integración continua
+```bash
+pip install -r requirements.txt
+pytest -v                                                   # contrato, reglas, productor y Spark
+python -m producer.productor_pagos --modo-seco --max-eventos 5   # productor sin Kafka
+```
+
+El flujo [`.github/workflows/ci.yml`](.github/workflows/ci.yml) se ejecuta en cada push a `main`, en cada
+Pull Request y a mano (*Actions → CI RapidGo → Run workflow*): valida la sintaxis, ejecuta `pytest`, prueba el
+productor en modo seco y valida `docker-compose.yml`. `main` exige que pase antes de integrar.
+
+## Resultados (Semana 2)
+Ejecución local de 10 minutos a 10 eventos/s con la marca de agua de 2 minutos
+([`docs/evidencias/semana2_metricas_despues.md`](docs/evidencias/semana2_metricas_despues.md)):
+
+| Medida | Valor |
+|---|---|
+| Mensajes por partición | 6038 en total: 32,5 % / 34,3 % / 33,1 % |
+| Primera ventana de indicadores escrita | a los 3,2 min (antes, con 10 min de marca de agua: 10,4 min) |
+| Demora entre el cierre de la ventana y su escritura | 140 s (antes: 620 s) |
+| Eventos de riesgo (puntaje ≥ 60) | 331 (5,52 %) |
+| Alertas por minuto | A1: 13,7 · A2: 33,1 |
+| Eventos descartados por llegar tarde | 0 |
+
+Detalle y decisión en el [punto de control de la Semana 2](docs/checkpoints/semana2.md) y el
+[ADR-002](docs/decisions/ADR-002-marca-de-agua.md).
 
 ## Plan de versiones
 | Versión | Semana | Contenido |
@@ -91,8 +140,9 @@ docker compose down
 
 ## Documentación
 - Indicadores y alertas: [`docs/kpis_y_alertas.md`](docs/kpis_y_alertas.md)
-- Registros de decisiones de arquitectura (ADR): [`docs/decisions/`](docs/decisions/)
-- Puntos de control semanales: [Semana 1](docs/checkpoints/semana1.md)
+- Data Lake: [`datalake/README.md`](datalake/README.md)
+- Registros de decisiones de arquitectura: [ADR-001](docs/decisions/ADR-001-topic-clave-particiones.md) · [ADR-002](docs/decisions/ADR-002-marca-de-agua.md)
+- Puntos de control semanales: [Semana 1](docs/checkpoints/semana1.md) · [Semana 2](docs/checkpoints/semana2.md)
 
 ## Contribuciones (Semana 1)
 | Integrante | Trabajo realizado | Pull Requests propios | Revisiones aprobadas |
@@ -100,5 +150,12 @@ docker compose down
 | Esteban Rueda | Indicadores y reglas de alerta (#3), topic, clave, particiones y ADR-001 (#4), contrato JSON y ejemplos (#2) | #23, #24, #26 | #22, #25, #27 |
 | Oscar Becerra | Estructura del repositorio (#1), docker-compose preliminar (#6), arquitectura y README (#5), corrección del esquema y prueba del contrato (#2), punto de control y versión (#7) | #22, #25, #27, #28, #29 | #23, #24, #26 |
 | Karol Perez | — | — | — |
+
+## Contribuciones (Semana 2)
+| Integrante | Trabajo realizado | Pull Requests propios | Revisiones aprobadas |
+|---|---|---|---|
+| Esteban Rueda | Integración continua `ci.yml`, dependencias y configuración de pytest (#11), productor de intentos de pago (#8) | #30, #31 | #35 |
+| Oscar Becerra | Spark Structured Streaming raw/processed, Dockerfile y servicios de Docker Compose (#9), protección de `main` con el CI, ADR-002, punto de control y versión (#12) | #32, #35 | #30, #31, #33, #34 |
+| Karol Perez | Indicadores K1–K4 y alertas A1/A2 en Spark (#10), pruebas de reglas y script de métricas (#11) | #33, #34 | #32, #35 |
 
 _Se actualizará cada semana. Enlace al video final: pendiente (Semana 4)._

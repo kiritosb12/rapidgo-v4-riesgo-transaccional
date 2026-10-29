@@ -77,7 +77,7 @@ services:
       RUTA_DATALAKE: /app/datalake
       INICIO_OFFSETS: earliest
       INTERVALO_LOTE: ${INTERVALO_LOTE:-10 seconds}
-      RETRASO_MAXIMO: ${RETRASO_MAXIMO:-10 minutes}
+      RETRASO_MAXIMO: ${RETRASO_MAXIMO:-2 minutes}   # marca de agua; ver docs/decisions/ADR-002
       SPARK_DRIVER_MEMORY: 1g
       SPARK_IVY_DIR: /root/.ivy2        # caché del conector de Kafka descargado de Maven
     ports:
