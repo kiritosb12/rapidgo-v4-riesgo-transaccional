@@ -154,8 +154,8 @@ Detalle y decisión en el [punto de control de la Semana 2](docs/checkpoints/sem
 ## Contribuciones (Semana 2)
 | Integrante | Trabajo realizado | Pull Requests propios | Revisiones aprobadas |
 |---|---|---|---|
-| Esteban Rueda | Integración continua `ci.yml`, dependencias y configuración de pytest (#11), productor de intentos de pago (#8) | #30, #31 | #35 |
-| Oscar Becerra | Spark Structured Streaming raw/processed, Dockerfile y servicios de Docker Compose (#9), protección de `main` con el CI, ADR-002, punto de control y versión (#12) | #32, #35 | #30, #31, #33, #34 |
+| Esteban Rueda | Integración continua `ci.yml`, dependencias y configuración de pytest (#11), productor de intentos de pago (#8) | #30, #31 | #36 |
+| Oscar Becerra | Spark Structured Streaming raw/processed, Dockerfile y servicios de Docker Compose (#9), protección de `main` con el CI, ADR-002, punto de control y versión (#12) | #32, #35, #36 | #30, #31, #33, #34 |
 | Karol Perez | Indicadores K1–K4 y alertas A1/A2 en Spark (#10), pruebas de reglas y script de métricas (#11) | #33, #34 | #32, #35 |
 
 _Se actualizará cada semana. Enlace al video final: pendiente (Semana 4)._
