@@ -1,9 +1,39 @@
 # RapidGo V4 - Riesgo transaccional
 # Semana 1 (preliminar): Kafka en modo KRaft (sin Zookeeper) + creación del topic + Kafka UI.
 # Semana 2: productor de eventos y Spark Structured Streaming (imagen propia, ver Dockerfile).
-# Semana 3: se agregan PostgreSQL y Airflow (servidor web y planificador).
+# Semana 3: PostgreSQL + Airflow 3 (api-server/interfaz web, scheduler y dag-processor) con el DAG de calidad.
 
 name: rapidgo-v4
+
+# Configuración común de los servicios de Airflow (ancla YAML reutilizada abajo con <<: *airflow-comun)
+x-airflow-comun: &airflow-comun
+  build: ./airflow
+  image: rapidgo-v4-airflow
+  user: "${AIRFLOW_UID:-50000}:0"
+  environment: &airflow-entorno
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__PARALLELISM: "4"          # LocalExecutor abre un proceso por cada uno (~140 MB); el valor por defecto es 32
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Bogota
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"   # solo para uso local: entra sin usuario ni contraseña
+    AIRFLOW__API__SECRET_KEY: rapidgo-v4-solo-local
+    AIRFLOW__API_AUTH__JWT_SECRET: rapidgo-v4-solo-local-jwt   # debe ser igual en todos los servicios de Airflow
+    AIRFLOW__API__WORKERS: "1"
+    AIRFLOW__API__BASE_URL: http://localhost:8081
+    PYTHONPATH: /opt/airflow                 # para importar orquestacion/ desde el DAG
+    RUTA_DATALAKE: /opt/airflow/datalake
+    KAFKA_BOOTSTRAP: kafka:9092
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./orquestacion:/opt/airflow/orquestacion:ro
+    - ./datalake:/opt/airflow/datalake
+  depends_on: &airflow-depende
+    postgres:
+      condition: service_healthy
 
 services:
   kafka:
@@ -111,5 +141,61 @@ services:
       - ./samples:/app/samples:ro
     restart: "no"
 
+  # ---------------------------------------------------------------- Semana 3
+  # Base de datos de Airflow (estado de DAG, ejecuciones, XCom).
+  postgres:
+    image: postgres:16-alpine
+    container_name: rg4-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 10
+
+  # Crea o actualiza las tablas de Airflow y termina.
+  airflow-init:
+    <<: *airflow-comun
+    container_name: rg4-airflow-init
+    command: ["bash", "-c", "airflow db migrate && airflow version"]
+    restart: "no"
+
+  # Interfaz web y API de Airflow → http://localhost:8081
+  airflow-apiserver:
+    <<: *airflow-comun
+    container_name: rg4-airflow-apiserver
+    command: api-server
+    ports:
+      - "8081:8080"
+    depends_on:
+      <<: *airflow-depende
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Planificador: crea las ejecuciones y corre las tareas (LocalExecutor).
+  airflow-scheduler:
+    <<: *airflow-comun
+    container_name: rg4-airflow-scheduler
+    command: scheduler
+    depends_on:
+      <<: *airflow-depende
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Lee los archivos de airflow/dags/ y registra los DAG.
+  airflow-dag-processor:
+    <<: *airflow-comun
+    container_name: rg4-airflow-dag-processor
+    command: dag-processor
+    depends_on:
+      <<: *airflow-depende
+      airflow-init:
+        condition: service_completed_successfully
+
 volumes:
   spark-ivy:
+  airflow-postgres:
