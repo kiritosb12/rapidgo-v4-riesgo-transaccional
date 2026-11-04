@@ -19,3 +19,5 @@ metastore_db/
 derby.log
 # Registros de lotes y resúmenes de métricas
 datalake/_metricas/
+# Airflow local del CI
+.airflow-ci/
