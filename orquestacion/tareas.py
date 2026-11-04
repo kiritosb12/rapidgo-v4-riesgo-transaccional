@@ -316,3 +316,70 @@ def validar_curated(cfg: Config, fecha: str) -> dict:
     return {"ventanas": int(len(kpis)), "ventana_inicio": inicio.isoformat(), "ventana_fin": fin.isoformat(),
             "ventanas_faltantes": int(faltantes), "intentos_kpis": suma_kpis, "intentos_processed": en_rango,
             "chequeos": chequeos, "advertencias": advertencias}
+
+
+# ------------------------------------------------------------------ 6. generar_reporte
+def _tabla_md(encabezado: list[str], filas: list) -> str:
+    lineas = ["| " + " | ".join(encabezado) + " |", "|" + "---|" * len(encabezado)]
+    return "\n".join(lineas + ["| " + " | ".join(str(v) for v in f) + " |" for f in filas])
+
+
+def _chequeos_md(nombre: str, resultado: dict) -> str:
+    filas = [("✅" if c["ok"] else ("⚠️" if c["nivel"] == "advertencia" else "❌"), c["chequeo"], c["valor"], c["umbral"])
+             for c in resultado.get("chequeos", [])]
+    return f"**{nombre}**\n\n" + _tabla_md(["", "Chequeo", "Valor", "Umbral"], filas)
+
+
+def generar_reporte(cfg: Config, fecha: str, resultados: dict, ejecucion: str = "manual") -> dict:
+    """Reporte del día en Markdown y JSON → curated/reportes/fecha=…/ (usa los XCom de las demás tareas)."""
+    fuentes, raw, kpis = resultados["verificar_fuentes"], resultados["validar_raw"], resultados["agregar_kpis"]
+    alertas, curated = resultados["consolidar_alertas"], resultados["validar_curated"]
+    horas = lago.leer(cfg.tabla("curated", "resumen_horario"), fecha)
+    top = lago.leer(cfg.tabla("curated", "alertas_consolidadas"), fecha).head(10)
+    ahora = datetime.now(ZONA)
+
+    partes = [
+        f"# Reporte de riesgo transaccional — {fecha}",
+        f"Generado {ahora:%Y-%m-%d %H:%M} (hora de Bogotá) · ejecución `{ejecucion}` · equipo {EQUIPO}", "",
+        "## Resumen",
+        _tabla_md(["Medida", "Valor"], [
+            ("Mensajes en raw", raw["mensajes"]),
+            ("Mensajes por partición", ", ".join(f"p{p}: {n}" for p, n in raw["por_particion"].items())),
+            ("Duplicados (mismo id_evento) en raw", raw["duplicados_id_evento"]),
+            ("Eventos en processed", kpis["eventos"]),
+            ("Pedidos", kpis["pedidos"]),
+            ("Valor promedio (COP)", f"{kpis['valor_promedio']:,.0f}".replace(",", ".")),
+            ("Eventos de riesgo (K3)", f"{kpis['eventos_riesgo']} ({kpis['k3_porcentaje_riesgo']} %)"),
+            ("Tasa de rechazo (K4)", f"{kpis['k4_tasa_rechazo']} %"),
+            ("Alertas A1 MULTIPLES_INTENTOS", alertas["alertas_a1"]),
+            ("Alertas A2 SENALES_COMBINADAS (por intento)", alertas["alertas_a2"]),
+            ("Pedidos con A2 (agrupadas por pedido)", f"{alertas['pedidos_con_a2']} (−{alertas['reduccion_a2_pct']} %)"),
+            ("Pedidos con alguna alerta / con A1 y A2 / ALTA",
+             f"{alertas['pedidos_con_alerta']} / {alertas['pedidos_con_a1_y_a2']} / {alertas['pedidos_alta']}"),
+            ("Ventanas de 1 minuto revisadas", curated["ventanas"]),
+        ]), "",
+        "## Indicadores por hora (hora de Bogotá)",
+        _tabla_md(["Hora", "Intentos", "Pedidos", "K1", "Valor prom.", "K3 %", "K4 %"],
+                  [(f"{int(h.hora_local):02d}:00", h.intentos, h.pedidos, h.k1_intentos_por_pedido,
+                    f"{h.valor_promedio:,.0f}".replace(",", "."), h.k3_porcentaje_riesgo, h.k4_tasa_rechazo)
+                   for h in horas.sort_values("hora_local").itertuples()]), "",
+        "## Pedidos prioritarios (top 10)",
+        _tabla_md(["Pedido", "Cliente", "Severidad", "Puntaje máx.", "A1", "A2", "Detalle"],
+                  [(r.id_pedido, r.id_cliente, r.severidad, r.puntaje_max, r.alertas_a1, r.alertas_a2, r.detalle)
+                   for r in top.itertuples()]), "",
+        "## Calidad de datos",
+        _chequeos_md("verificar_fuentes", fuentes), "",
+        _chequeos_md("validar_raw", raw), "",
+        _chequeos_md("validar_curated", curated), "",
+    ]
+    advertencias = fuentes["advertencias"] + raw["advertencias"] + curated["advertencias"]
+    partes += ["## Advertencias", *(f"- {a}" for a in advertencias)] if advertencias else ["## Advertencias", "Ninguna."]
+
+    carpeta = cfg.tabla("curated", "reportes", f"fecha={fecha}")
+    carpeta.mkdir(parents=True, exist_ok=True)
+    base = carpeta / f"reporte_{ahora:%H%M%S}"
+    base.with_suffix(".md").write_text("\n".join(partes) + "\n", encoding="utf-8")
+    base.with_suffix(".json").write_text(json.dumps({"fecha": fecha, "ejecucion": ejecucion, **resultados},
+                                                    ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    return {"reporte_md": str(base.with_suffix(".md")), "reporte_json": str(base.with_suffix(".json")),
+            "advertencias": len(advertencias)}

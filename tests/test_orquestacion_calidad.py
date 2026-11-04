@@ -116,3 +116,22 @@ def test_pedido_viejo_que_falta_en_el_consolidado_es_falla(tmp_path):
     _alerta_nueva(cfg, -10)                    # alerta anterior a la foto que no quedó consolidada
     with pytest.raises(T.FalloCalidad, match="consolidado = pedidos con alerta"):
         T.validar_curated(cfg, FECHA)
+
+
+def test_generar_reporte(tmp_path):
+    cfg = preparar(tmp_path)
+    resultados = {
+        "verificar_fuentes": {"chequeos": [], "advertencias": ["raw recibe datos recientes: valor=70 min (umbral <= 10 min)"]},
+        "validar_raw": T.validar_raw(cfg, FECHA),
+        "agregar_kpis": T.agregar_kpis(cfg, FECHA),
+        "consolidar_alertas": T.consolidar_alertas(cfg, FECHA),
+        "validar_curated": T.validar_curated(cfg, FECHA),
+    }
+    r = T.generar_reporte(cfg, FECHA, resultados, "prueba")
+    texto = Path(r["reporte_md"]).read_text(encoding="utf-8")
+    assert "# Reporte de riesgo transaccional — 2026-10-27" in texto
+    assert "| Pedidos con A2 (agrupadas por pedido) | 1 (−50.0 %) |" in texto
+    assert "| PED-20261027-000002 |" in texto and "raw recibe datos recientes" in texto
+    datos = json.loads(Path(r["reporte_json"]).read_text(encoding="utf-8"))
+    assert datos["fecha"] == FECHA and datos["agregar_kpis"]["eventos"] == 9
+    assert r["advertencias"] == 1 + len(resultados["validar_raw"]["advertencias"])
