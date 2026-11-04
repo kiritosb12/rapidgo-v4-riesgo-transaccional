@@ -153,3 +153,166 @@ def validar_raw(cfg: Config, fecha: str) -> dict:
     return {"mensajes": total, "invalidos": invalidos, "duplicados_id_evento": duplicados,
             "por_particion": {str(p): int(n) for p, n in por_part["count"].items()},
             "desbalance_pct": desbalance, "chequeos": chequeos, "advertencias": advertencias}
+
+
+# ------------------------------------------------------------------ 3. agregar_kpis
+def resumen_por_hora(processed: pd.DataFrame) -> pd.DataFrame:
+    g = processed.groupby("hora_local")
+    resumen = pd.DataFrame({
+        "intentos": g.size(),
+        "pedidos": g["id_pedido"].nunique(),
+        "valor_promedio": g["valor"].mean().round(0),
+        "eventos_riesgo": g["es_evento_riesgo"].sum().astype(int),
+        "rechazos": g["es_rechazo"].sum().astype(int),
+    }).reset_index()
+    resumen["k1_intentos_por_pedido"] = (resumen["intentos"] / resumen["pedidos"]).round(3)
+    resumen["k3_porcentaje_riesgo"] = (100 * resumen["eventos_riesgo"] / resumen["intentos"]).round(2)
+    resumen["k4_tasa_rechazo"] = (100 * resumen["rechazos"] / resumen["intentos"]).round(2)
+    return resumen
+
+
+def agregar_kpis(cfg: Config, fecha: str) -> dict:
+    """Resumen por hora (hora de Bogotá) desde processed → curated/resumen_horario/fecha=…"""
+    columnas = ["id_pedido", "valor", "hora_local", "es_evento_riesgo", "es_rechazo"]
+    processed = lago.leer(cfg.tabla("processed", "pagos"), fecha, columnas)
+    if processed.empty:
+        raise FalloCalidad(f"agregar_kpis — processed está vacía para fecha={fecha}")
+    resumen = resumen_por_hora(processed)
+    ruta = lago.escribir(resumen, cfg.tabla("curated", "resumen_horario"), fecha, "resumen_horario")
+    eventos = len(processed)
+    return {
+        "eventos": eventos,
+        "pedidos": int(processed["id_pedido"].nunique()),
+        "horas": int(len(resumen)),
+        "valor_promedio": round(float(processed["valor"].mean()), 0),
+        "eventos_riesgo": int(processed["es_evento_riesgo"].sum()),
+        "k3_porcentaje_riesgo": round(100 * float(processed["es_evento_riesgo"].mean()), 2),
+        "k4_tasa_rechazo": round(100 * float(processed["es_rechazo"].mean()), 2),
+        "ruta": str(ruta),
+    }
+
+
+# ------------------------------------------------------------------ 4. consolidar_alertas
+def _alertas_de_fecha(tabla: Path, fecha: str) -> pd.DataFrame:
+    df = lago.leer(tabla)
+    if df.empty:
+        return df
+    return df[_fecha_local(df["inicio_ventana"]) == fecha].copy()
+
+
+COLUMNAS_CONSOLIDADO = ["id_pedido", "id_cliente", "alertas_a1", "alertas_a2", "severidad", "puntaje_max",
+                         "primera_alerta", "ultima_alerta", "detalle"]
+
+
+def consolidar(a1: pd.DataFrame, a2: pd.DataFrame) -> pd.DataFrame:
+    """Una fila por pedido con alerta. A2 alerta cada intento riesgoso; aquí se agrupa por pedido (ADR-002)."""
+    columnas = ["id_pedido", "id_cliente", "severidad", "puntaje_riesgo", "fecha_deteccion", "detalle"]
+    partes = [df[columnas].assign(tipo=t) for df, t in ((a1, "A1"), (a2, "A2")) if not df.empty]
+    if not partes:
+        return pd.DataFrame(columns=COLUMNAS_CONSOLIDADO)
+    todas = pd.concat(partes, ignore_index=True).sort_values("fecha_deteccion")
+    g = todas.groupby("id_pedido")
+    detalle_a2 = todas[todas["tipo"] == "A2"].groupby("id_pedido")["detalle"].last()
+    detalle_a1 = todas[todas["tipo"] == "A1"].groupby("id_pedido")["detalle"].last()
+    salida = pd.DataFrame({
+        "id_cliente": g["id_cliente"].first(),
+        "alertas_a1": g["tipo"].agg(lambda s: int((s == "A1").sum())),
+        "alertas_a2": g["tipo"].agg(lambda s: int((s == "A2").sum())),
+        "severidad": g["severidad"].agg(lambda s: "ALTA" if (s == "ALTA").any() else "MEDIA"),
+        "puntaje_max": g["puntaje_riesgo"].max().astype(int),
+        "primera_alerta": g["fecha_deteccion"].min(),
+        "ultima_alerta": g["fecha_deteccion"].max(),
+    })
+    salida["detalle"] = detalle_a2.reindex(salida.index).combine_first(detalle_a1.reindex(salida.index))
+    salida = salida.reset_index()
+    salida["_orden"] = salida["severidad"].map({"ALTA": 0, "MEDIA": 1})
+    return (salida.sort_values(["_orden", "puntaje_max", "alertas_a2", "alertas_a1"], ascending=[True, False, False, False])
+            .drop(columns="_orden").reset_index(drop=True)[COLUMNAS_CONSOLIDADO])
+
+
+def consolidar_alertas(cfg: Config, fecha: str) -> dict:
+    """Une A1 y A2 de la fecha y agrupa por pedido → curated/alertas_consolidadas/fecha=…"""
+    a1 = _alertas_de_fecha(cfg.tabla("curated", "alertas_multiples_intentos"), fecha)
+    a2 = _alertas_de_fecha(cfg.tabla("curated", "alertas_senales_combinadas"), fecha)
+    consolidadas = consolidar(a1, a2)
+    ruta = lago.escribir(consolidadas, cfg.tabla("curated", "alertas_consolidadas"), fecha, "alertas_consolidadas")
+    pedidos_a2 = int(a2["id_pedido"].nunique()) if not a2.empty else 0
+    return {
+        "alertas_a1": len(a1),
+        "alertas_a2": len(a2),
+        "pedidos_con_a2": pedidos_a2,
+        "reduccion_a2_pct": round(100 * (1 - pedidos_a2 / len(a2)), 1) if len(a2) else 0.0,
+        "pedidos_con_alerta": len(consolidadas),
+        "pedidos_con_a1_y_a2": int(((consolidadas["alertas_a1"] > 0) & (consolidadas["alertas_a2"] > 0)).sum()),
+        "pedidos_alta": int((consolidadas["severidad"] == "ALTA").sum()),
+        "ruta": str(ruta),
+    }
+
+
+# ------------------------------------------------------------------ 5. validar_curated
+MARGEN_LOTE = pd.Timedelta(minutes=1)
+
+
+def _cobertura_consolidado(alertas: pd.DataFrame, consolidadas: pd.DataFrame) -> tuple[int, int, int]:
+    """Compara el consolidado con las alertas actuales. Spark sigue escribiendo alertas mientras corre el DAG,
+    así que el consolidado es una foto: solo se exige que estén los pedidos cuya primera alerta es anterior a
+    esa foto (con un margen para el lote que estaba en curso). Devuelve (faltan, sobran, nuevos_despues_del_corte)."""
+    en_consolidado = set(consolidadas["id_pedido"]) if not consolidadas.empty else set()
+    if alertas.empty:
+        return 0, len(en_consolidado), 0
+    primera = alertas.groupby("id_pedido")["fecha_deteccion"].min()
+    corte = consolidadas["ultima_alerta"].max() if not consolidadas.empty else primera.max()
+    esperados = set(primera[primera <= corte - MARGEN_LOTE].index)
+    faltan = len(esperados - en_consolidado)
+    sobran = len(en_consolidado - set(primera.index))
+    nuevos = len(set(primera.index) - en_consolidado) - faltan
+    return faltan, sobran, nuevos
+
+
+def validar_curated(cfg: Config, fecha: str) -> dict:
+    """Coherencia de la capa curated: rangos de los indicadores, ventanas completas, totales que cuadran
+    con processed y alertas que apuntan a pedidos reales."""
+    kpis = lago.leer(cfg.tabla("curated", "kpis_1min"))
+    if not kpis.empty:
+        kpis = kpis[_fecha_local(kpis["inicio_ventana"]) == fecha]
+    if kpis.empty:
+        raise FalloCalidad(f"validar_curated — no hay ventanas de indicadores cerradas para fecha={fecha}")
+    processed = lago.leer(cfg.tabla("processed", "pagos"), fecha, ["id_pedido", "fecha_evento"])
+
+    fuera_de_rango = int((~kpis["k3_porcentaje_riesgo"].between(0, 100) | ~kpis["k4_tasa_rechazo"].between(0, 100)
+                          | (kpis["k1_intentos_por_pedido"] < 1) | (kpis["intentos"] <= 0)).sum())
+    inicio, fin = kpis["inicio_ventana"].min(), kpis["fin_ventana"].max()
+    esperadas = int((fin - inicio) / pd.Timedelta(minutes=1))
+    faltantes = esperadas - kpis["inicio_ventana"].nunique()
+    ventanas_repetidas = int(kpis["inicio_ventana"].duplicated().sum())
+
+    en_rango = int(((processed["fecha_evento"] >= inicio) & (processed["fecha_evento"] < fin)).sum())
+    suma_kpis = int(kpis["intentos"].sum())
+    diferencia = round(100 * abs(suma_kpis - en_rango) / max(en_rango, 1), 2)
+
+    pedidos = set(processed["id_pedido"])
+    a1 = _alertas_de_fecha(cfg.tabla("curated", "alertas_multiples_intentos"), fecha)
+    a2 = _alertas_de_fecha(cfg.tabla("curated", "alertas_senales_combinadas"), fecha)
+    alertas = pd.concat([a1, a2], ignore_index=True) if not (a1.empty and a2.empty) else pd.DataFrame(columns=["id_pedido", "severidad"])
+    huerfanas = int((~alertas["id_pedido"].isin(pedidos)).sum())
+    severidad_mala = int((~alertas["severidad"].isin(SEVERIDADES)).sum())
+    consolidadas = lago.leer(cfg.tabla("curated", "alertas_consolidadas"), fecha)
+    pedidos_alerta = alertas["id_pedido"].nunique()
+    faltan, sobran, nuevas = _cobertura_consolidado(alertas, consolidadas)
+
+    chequeos = [
+        _chequeo("indicadores dentro de rango", fuera_de_rango == 0, fuera_de_rango, "0 ventanas fuera de rango"),
+        _chequeo("ventanas sin repetir", ventanas_repetidas == 0, ventanas_repetidas, "0"),
+        _chequeo("intentos de kpis_1min = processed", diferencia <= cfg.max_dif_consistencia_pct,
+                 f"{suma_kpis} vs {en_rango} ({diferencia} %)", f"<= {cfg.max_dif_consistencia_pct} %"),
+        _chequeo("alertas con pedido existente", huerfanas == 0, huerfanas, "0"),
+        _chequeo("severidades válidas", severidad_mala == 0, severidad_mala, "0"),
+        _chequeo("consolidado = pedidos con alerta", faltan == 0 and sobran == 0,
+                 f"{len(consolidadas)} consolidados vs {pedidos_alerta} con alerta ahora (faltan {faltan}, "
+                 f"sobran {sobran}, {nuevas} nuevos después del corte)", "0 faltantes y 0 sobrantes"),
+        _chequeo("ventanas de 1 minuto continuas", faltantes == 0, faltantes, "0 faltantes", "advertencia"),
+    ]
+    advertencias = _evaluar("validar_curated", chequeos)
+    return {"ventanas": int(len(kpis)), "ventana_inicio": inicio.isoformat(), "ventana_fin": fin.isoformat(),
+            "ventanas_faltantes": int(faltantes), "intentos_kpis": suma_kpis, "intentos_processed": en_rango,
+            "chequeos": chequeos, "advertencias": advertencias}
