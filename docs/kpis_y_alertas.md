@@ -59,6 +59,11 @@ de tarjetas. El horario nocturno pesa poco porque, por sí solo, es normal (hay 
 | A2 | `datalake/curated/alertas_senales_combinadas/` | mismas columnas; `inicio_ventana = fin_ventana = fecha_evento` y `detalle` con las señales, el intento, el valor y el país |
 
 Las dos alertas tienen las mismas columnas para poder unirlas en un solo reporte (Airflow, Semana 3).
+
+**Alertas consolidadas (Semana 3):** la tarea `consolidar_alertas` del DAG une A1 y A2 de cada día y deja **una
+fila por pedido** en `datalake/curated/alertas_consolidadas/fecha=…/` (`alertas_a1`, `alertas_a2`, severidad
+`ALTA` si alguna lo es, `puntaje_max`, primera y última alerta, detalle). Así un pedido de prueba de tarjetas con
+varios intentos riesgosos aparece una sola vez en el reporte (pendiente del ADR-002).
 Van en carpetas separadas porque dos consultas continuas de Spark no pueden escribir en la misma ruta.
 
 **Cuándo aparece cada resultado:** las ventanas se escriben en modo *append*, es decir, solo cuando la marca de
