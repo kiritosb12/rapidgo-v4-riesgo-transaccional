@@ -107,7 +107,7 @@ def test_raw_vacia_es_falla_de_fuente(tmp_path, kafka_falso):
         T.verificar_fuentes(config(crear_lago(tmp_path), kafka_falso), "2026-01-01")
 
 
-def test_datos_viejos_solo_advierten(tmp_path, kafka_falso):
+def test_datos_viejos_de_un_dia_pasado_solo_advierten(tmp_path, kafka_falso):
     crear_lago(tmp_path)
     hace_una_hora = time.time() - 3600
     for archivo in (tmp_path / "raw").rglob("*.parquet"):
@@ -115,6 +115,23 @@ def test_datos_viejos_solo_advierten(tmp_path, kafka_falso):
     r = T.verificar_fuentes(config(tmp_path, kafka_falso), FECHA)
     assert r["minutos_desde_ultimo_dato"] >= 59
     assert any("datos recientes" in a for a in r["advertencias"])
+
+
+def test_hoy_sin_datos_nuevos_es_falla_de_fuente(tmp_path, kafka_falso, monkeypatch):
+    """Spark o el productor detenidos: hoy no llegan datos a raw → falla (se reintenta)."""
+    crear_lago(tmp_path)
+    hace_15_min = time.time() - 15 * 60
+    for archivo in (tmp_path / "raw").rglob("*.parquet"):
+        os.utime(archivo, (hace_15_min, hace_15_min))
+    monkeypatch.setattr(T, "_hoy", lambda: FECHA)
+    with pytest.raises(T.FalloFuente, match="no recibe datos nuevos hace 15"):
+        T.verificar_fuentes(config(tmp_path, kafka_falso), FECHA)
+
+
+def test_hoy_con_datos_recientes_pasa(tmp_path, kafka_falso, monkeypatch):
+    monkeypatch.setattr(T, "_hoy", lambda: FECHA)
+    r = T.verificar_fuentes(config(crear_lago(tmp_path), kafka_falso), FECHA)
+    assert r["minutos_desde_ultimo_dato"] < 1
 
 
 # ------------------------------------------------------------------ validar_raw
