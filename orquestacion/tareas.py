@@ -58,12 +58,16 @@ class Config:
         return Path(self.ruta_datalake, *partes)
 
 
+def _hoy() -> str:
+    return datetime.now(ZONA).strftime("%Y-%m-%d")
+
+
 def resolver_fecha(fecha: str | None) -> str:
     """Fecha a revisar (AAAA-MM-DD, hora de Bogotá). Vacía = hoy."""
     if fecha:
         datetime.strptime(fecha, "%Y-%m-%d")      # valida el formato
         return fecha
-    return datetime.now(ZONA).strftime("%Y-%m-%d")
+    return _hoy()
 
 
 # ------------------------------------------------------------------ chequeos
@@ -86,7 +90,11 @@ def _fecha_local(serie: pd.Series) -> pd.Series:
 
 # ------------------------------------------------------------------ 1. verificar_fuentes
 def verificar_fuentes(cfg: Config, fecha: str) -> dict:
-    """Kafka responde y la capa raw tiene archivos confirmados para la fecha."""
+    """Kafka responde y la capa raw tiene archivos confirmados para la fecha.
+
+    Si se revisa el día de HOY, raw además debe haber recibido datos en los últimos `max_minutos_sin_datos`:
+    si no, Spark o el productor están detenidos (falla de fuente, se reintenta). Para días pasados es solo un aviso.
+    """
     errores = []
     for servidor in cfg.kafka_bootstrap.split(","):
         host, puerto = servidor.strip().rsplit(":", 1)
@@ -102,6 +110,10 @@ def verificar_fuentes(cfg: Config, fecha: str) -> dict:
         raise FalloFuente(f"La capa raw no tiene archivos confirmados para fecha={fecha} en {cfg.tabla('raw', 'pagos')}")
     processed = lago.archivos_de_fecha(cfg.tabla("processed", "pagos"), fecha)
     minutos = round((time.time() - max(a.stat().st_mtime for a in raw)) / 60, 1)
+    es_hoy = fecha == _hoy()
+    if es_hoy and minutos > cfg.max_minutos_sin_datos:
+        raise FalloFuente(f"La capa raw no recibe datos nuevos hace {minutos} min (máximo {cfg.max_minutos_sin_datos} min): "
+                          "¿Spark o el productor están detenidos?")
 
     chequeos = [
         _chequeo("raw recibe datos recientes", minutos <= cfg.max_minutos_sin_datos, f"{minutos} min",
@@ -251,6 +263,9 @@ def consolidar_alertas(cfg: Config, fecha: str) -> dict:
 
 # ------------------------------------------------------------------ 5. validar_curated
 MARGEN_LOTE = pd.Timedelta(minutes=1)
+# `pedidos` sale de approx_count_distinct (HyperLogLog, error cercano al 5 %): en una ventana casi sin
+# reintentos puede contar un pedido más que intentos, así que K1 puede quedar apenas por debajo de 1.
+K1_MINIMO = 0.95
 
 
 def _cobertura_consolidado(alertas: pd.DataFrame, consolidadas: pd.DataFrame) -> tuple[int, int, int]:
@@ -269,6 +284,20 @@ def _cobertura_consolidado(alertas: pd.DataFrame, consolidadas: pd.DataFrame) ->
     return faltan, sobran, nuevos
 
 
+def _alertas_sin_pedido(alertas: pd.DataFrame, pedidos: set, processed: pd.DataFrame) -> tuple[int, int]:
+    """Alertas cuyo pedido no está en processed → (huérfanas, A2 recientes). A2 se calcula evento por evento en
+    otra consulta de Spark: su alerta puede guardarse segundos antes que la fila del evento en processed. Por eso
+    una A2 posterior a lo último que escribió processed (menos un margen para el lote en curso) no se cuenta."""
+    if alertas.empty:
+        return 0, 0
+    sin_pedido = ~alertas["id_pedido"].isin(pedidos)
+    if processed.empty:
+        return int(sin_pedido.sum()), 0
+    corte = processed["fecha_procesamiento"].max() - MARGEN_LOTE
+    reciente = (alertas["tipo_alerta"] == "SENALES_COMBINADAS") & (alertas["fecha_deteccion"] > corte)
+    return int((sin_pedido & ~reciente).sum()), int((sin_pedido & reciente).sum())
+
+
 def validar_curated(cfg: Config, fecha: str) -> dict:
     """Coherencia de la capa curated: rangos de los indicadores, ventanas completas, totales que cuadran
     con processed y alertas que apuntan a pedidos reales."""
@@ -277,10 +306,10 @@ def validar_curated(cfg: Config, fecha: str) -> dict:
         kpis = kpis[_fecha_local(kpis["inicio_ventana"]) == fecha]
     if kpis.empty:
         raise FalloCalidad(f"validar_curated — no hay ventanas de indicadores cerradas para fecha={fecha}")
-    processed = lago.leer(cfg.tabla("processed", "pagos"), fecha, ["id_pedido", "fecha_evento"])
+    processed = lago.leer(cfg.tabla("processed", "pagos"), fecha, ["id_pedido", "fecha_evento", "fecha_procesamiento"])
 
     fuera_de_rango = int((~kpis["k3_porcentaje_riesgo"].between(0, 100) | ~kpis["k4_tasa_rechazo"].between(0, 100)
-                          | (kpis["k1_intentos_por_pedido"] < 1) | (kpis["intentos"] <= 0)).sum())
+                          | (kpis["k1_intentos_por_pedido"] < K1_MINIMO) | (kpis["intentos"] <= 0)).sum())
     inicio, fin = kpis["inicio_ventana"].min(), kpis["fin_ventana"].max()
     esperadas = int((fin - inicio) / pd.Timedelta(minutes=1))
     faltantes = esperadas - kpis["inicio_ventana"].nunique()
@@ -294,7 +323,7 @@ def validar_curated(cfg: Config, fecha: str) -> dict:
     a1 = _alertas_de_fecha(cfg.tabla("curated", "alertas_multiples_intentos"), fecha)
     a2 = _alertas_de_fecha(cfg.tabla("curated", "alertas_senales_combinadas"), fecha)
     alertas = pd.concat([a1, a2], ignore_index=True) if not (a1.empty and a2.empty) else pd.DataFrame(columns=["id_pedido", "severidad"])
-    huerfanas = int((~alertas["id_pedido"].isin(pedidos)).sum())
+    huerfanas, recientes = _alertas_sin_pedido(alertas, pedidos, processed)
     severidad_mala = int((~alertas["severidad"].isin(SEVERIDADES)).sum())
     consolidadas = lago.leer(cfg.tabla("curated", "alertas_consolidadas"), fecha)
     pedidos_alerta = alertas["id_pedido"].nunique()
@@ -305,7 +334,9 @@ def validar_curated(cfg: Config, fecha: str) -> dict:
         _chequeo("ventanas sin repetir", ventanas_repetidas == 0, ventanas_repetidas, "0"),
         _chequeo("intentos de kpis_1min = processed", diferencia <= cfg.max_dif_consistencia_pct,
                  f"{suma_kpis} vs {en_rango} ({diferencia} %)", f"<= {cfg.max_dif_consistencia_pct} %"),
-        _chequeo("alertas con pedido existente", huerfanas == 0, huerfanas, "0"),
+        _chequeo("alertas con pedido existente", huerfanas == 0,
+                 f"{huerfanas} (más {recientes} A2 recientes cuyo pedido aún no llega a processed)" if recientes else huerfanas,
+                 "0"),
         _chequeo("severidades válidas", severidad_mala == 0, severidad_mala, "0"),
         _chequeo("consolidado = pedidos con alerta", faltan == 0 and sobran == 0,
                  f"{len(consolidadas)} consolidados vs {pedidos_alerta} con alerta ahora (faltan {faltan}, "

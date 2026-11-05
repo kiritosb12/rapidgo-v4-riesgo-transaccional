@@ -26,6 +26,7 @@ x-airflow-comun: &airflow-comun
     PYTHONPATH: /opt/airflow                 # para importar orquestacion/ desde el DAG
     RUTA_DATALAKE: /opt/airflow/datalake
     KAFKA_BOOTSTRAP: kafka:9092
+    MAX_MINUTOS_SIN_DATOS: ${MAX_MINUTOS_SIN_DATOS:-10}   # minutos sin datos en raw (hoy) antes de fallar
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs

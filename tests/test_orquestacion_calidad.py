@@ -76,6 +76,31 @@ def test_intentos_que_no_cuadran_es_falla_de_calidad(tmp_path):
         T.validar_curated(cfg, FECHA)
 
 
+def _cambiar_k1(cfg, pedidos_extra=None, k1=None):
+    tabla = cfg.tabla("curated", "kpis_1min")
+    kpis = lago.leer(tabla)
+    if pedidos_extra is not None:
+        kpis.loc[0, "pedidos"] = kpis.loc[0, "intentos"] + pedidos_extra
+        kpis.loc[0, "k1_intentos_por_pedido"] = round(kpis.loc[0, "intentos"] / kpis.loc[0, "pedidos"], 3)
+    if k1 is not None:
+        kpis.loc[0, "k1_intentos_por_pedido"] = k1
+    kpis.to_parquet(lago.archivos_confirmados(tabla)[0], index=False)
+
+
+def test_k1_apenas_menor_que_1_por_el_conteo_aproximado_no_es_falla(tmp_path):
+    cfg = preparar(tmp_path)
+    _cambiar_k1(cfg, k1=0.994)                 # caso real del 5 de noviembre: 174 intentos y 175 pedidos aproximados
+    r = T.validar_curated(cfg, FECHA)
+    assert next(c for c in r["chequeos"] if c["chequeo"] == "indicadores dentro de rango")["ok"]
+
+
+def test_k1_muy_bajo_es_falla_de_calidad(tmp_path):
+    cfg = preparar(tmp_path)
+    _cambiar_k1(cfg, k1=0.5)
+    with pytest.raises(T.FalloCalidad, match="indicadores dentro de rango"):
+        T.validar_curated(cfg, FECHA)
+
+
 def test_alerta_de_pedido_inexistente(tmp_path):
     cfg = preparar(tmp_path)
     tabla = cfg.tabla("curated", "alertas_multiples_intentos")
@@ -83,6 +108,31 @@ def test_alerta_de_pedido_inexistente(tmp_path):
     a1.loc[0, "id_pedido"] = "PED-NO-EXISTE"
     a1.to_parquet(lago.archivos_confirmados(tabla)[0], index=False)
     T.consolidar_alertas(cfg, FECHA)
+    with pytest.raises(T.FalloCalidad, match="alertas con pedido existente"):
+        T.validar_curated(cfg, FECHA)
+
+
+def _a2_de_pedido_inexistente(cfg, minutos_despues_de_processed):
+    tabla = cfg.tabla("curated", "alertas_senales_combinadas")
+    a2 = lago.leer(tabla)
+    corte = lago.leer(cfg.tabla("processed", "pagos"), FECHA)["fecha_procesamiento"].max()
+    a2.loc[0, "id_pedido"] = "PED-AUN-NO-LLEGA"
+    a2.loc[0, "fecha_deteccion"] = corte + pd.Timedelta(minutes=minutos_despues_de_processed)
+    a2.to_parquet(lago.archivos_confirmados(tabla)[0], index=False)
+    T.consolidar_alertas(cfg, FECHA)
+
+
+def test_a2_reciente_cuyo_pedido_aun_no_llega_a_processed_no_es_falla(tmp_path):
+    cfg = preparar(tmp_path)
+    _a2_de_pedido_inexistente(cfg, 0.5)       # Spark guardó la alerta antes que la fila en processed
+    r = T.validar_curated(cfg, FECHA)
+    c = next(c for c in r["chequeos"] if c["chequeo"] == "alertas con pedido existente")
+    assert c["ok"] and "1 A2 recientes" in str(c["valor"])
+
+
+def test_a2_vieja_sin_pedido_es_falla(tmp_path):
+    cfg = preparar(tmp_path)
+    _a2_de_pedido_inexistente(cfg, -5)        # anterior a lo último que escribió processed: es un error real
     with pytest.raises(T.FalloCalidad, match="alertas con pedido existente"):
         T.validar_curated(cfg, FECHA)
 
