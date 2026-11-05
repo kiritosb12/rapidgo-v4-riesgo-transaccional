@@ -1,5 +1,8 @@
 # Integración continua — RapidGo V4 (Riesgo transaccional)
 # Se ejecuta en cada push a main/develop, en cada Pull Request hacia main y a mano (workflow_dispatch).
+# Dos trabajos en paralelo:
+#   validar      → sintaxis, pruebas (contrato, reglas, productor, Spark, orquestación), productor y compose
+#   validar-dag  → instala Airflow 3.3.2 e importa el DAG (Semana 3)
 name: CI RapidGo
 
 on:
@@ -33,9 +36,9 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Validar sintaxis Python
-        run: python -m compileall -q producer spark tests scripts
+        run: python -m compileall -q producer spark orquestacion airflow/dags tests scripts
 
-      - name: Ejecutar pruebas (contrato, reglas, productor y Spark)
+      - name: Ejecutar pruebas (contrato, reglas, productor, Spark y orquestación)
         run: pytest -v
 
       - name: Probar el productor sin Kafka (20 eventos validados contra el contrato)
@@ -43,3 +46,28 @@ jobs:
 
       - name: Validar Docker Compose
         run: docker compose config --quiet
+
+  validar-dag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AIRFLOW_VERSION: '3.3.2'
+      AIRFLOW_HOME: ${{ github.workspace }}/.airflow-ci
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configurar Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Instalar Airflow con sus restricciones oficiales
+        run: >
+          pip install "apache-airflow==${AIRFLOW_VERSION}" pandas pyarrow pytest jsonschema tzdata
+          --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.13.txt"
+
+      - name: Importar el DAG y probar su estructura y sus tareas
+        run: pytest -v tests/test_dag.py tests/test_orquestacion_fuentes.py tests/test_orquestacion_calidad.py
