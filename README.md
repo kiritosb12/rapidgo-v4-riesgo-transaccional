@@ -10,7 +10,7 @@ Proyecto final — Línea de Profundización I (Big Data) · Ingeniería de Sist
 | **Equipo** | 9 |
 | **Integrantes** | Esteban Rueda ([@jers120506-gif](https://github.com/jers120506-gif)) · Oscar Becerra ([@kiritosb12](https://github.com/kiritosb12)) · Karol Perez ([@Karitoperez](https://github.com/Karitoperez)) |
 | **Variante** | 4 — Riesgo transaccional |
-| **Versión actual** | `v0.2.0-streaming` (Semana 2 · flujo funcional e integración continua) |
+| **Versión actual** | `v0.3.0-orchestration` (Semana 3 · Airflow, calidad y resiliencia) |
 | **Tablero Kanban** | [RapidGo V4 – Kanban](https://github.com/users/kiritosb12/projects/2) (20 Issues, Semanas 1 a 4) |
 
 ## Problema de negocio
@@ -69,14 +69,14 @@ Detalle completo en [docs/kpis_y_alertas.md](docs/kpis_y_alertas.md).
 | A1 `MULTIPLES_INTENTOS` | mismo `id_pedido` con 3 o más intentos, o 2 o más rechazos, en 5 minutos |
 | A2 `SENALES_COMBINADAS` | `puntaje_riesgo >= 60` con al menos 2 señales (valor ≥ 500.000, IP fuera de Colombia, intento ≥ 3, rechazo sospechoso, entre las 00 y las 05 h) |
 
-## Ejecución local (Semana 2)
-Requisitos: Docker Desktop con **al menos 6 GB de memoria** asignados, Git y, para correr las pruebas en el
+## Ejecución local
+Requisitos: Docker Desktop con **al menos 6 GB de memoria** asignados (8 GB recomendados con Airflow), Git y, para correr las pruebas en el
 computador, Python 3.12+ y Java 17+ (opcional: sin Java las pruebas de Spark se omiten).
 
 ```bash
 git clone https://github.com/kiritosb12/rapidgo-v4-riesgo-transaccional.git
 cd rapidgo-v4-riesgo-transaccional
-docker compose up -d --build          # Kafka + topic + Kafka UI + Spark + productor
+docker compose up -d --build          # Kafka + topic + Kafka UI + Spark + productor + PostgreSQL + Airflow
 docker compose logs kafka-init        # debe mostrar PartitionCount: 3
 docker compose logs -f spark          # lotes de cada consulta (la 1.ª vez descarga el conector de Kafka)
 ```
@@ -87,6 +87,8 @@ docker compose logs -f spark          # lotes de cada consulta (la 1.ª vez desc
 | `kafka-ui` | Ver mensajes, particiones y offsets | http://localhost:8080 |
 | `spark` | 5 consultas continuas → `datalake/` | http://localhost:4040 (pestaña *Structured Streaming*) |
 | `productor` | ~10 eventos/s; termina si se define `DURACION_PRODUCTOR` | `docker compose logs productor` |
+| `postgres` + `airflow-init` | Base de datos de Airflow (se prepara sola) | — |
+| `airflow-apiserver` / `airflow-scheduler` / `airflow-dag-processor` | Interfaz, ejecución de tareas y lectura de DAG | http://localhost:8081 |
 
 Parámetros (variables de entorno al levantar): `EVENTOS_POR_SEGUNDO` (10), `DURACION_PRODUCTOR` (0 = sin
 límite), `INTERVALO_LOTE` (`10 seconds`), `RETRASO_MAXIMO` (marca de agua, ver ADR-002). Ejemplo:
@@ -103,6 +105,50 @@ docker compose stop productor spark                                 # detener (e
 docker compose down                                                 # apagar todo
 ```
 
+## Airflow: control de calidad y reporte (Semana 3)
+`docker compose up -d --build` también levanta PostgreSQL y Airflow 3.3.2 (api-server, scheduler y dag-processor).
+La primera vez tarda unos minutos en construir la imagen.
+
+| Qué | Dónde |
+|---|---|
+| Interfaz de Airflow (sin usuario ni contraseña, solo uso local) | http://localhost:8081 |
+| DAG | `rapidgo_riesgo_transaccional` ([airflow/dags/](airflow/dags/rapidgo_riesgo_transaccional.py)) — cada hora, pausado al crearse |
+| Lógica de las tareas (Python puro, probada con pytest) | [orquestacion/tareas.py](orquestacion/tareas.py) |
+| Reportes | `datalake/curated/reportes/fecha=AAAA-MM-DD/` |
+
+```
+verificar_fuentes → validar_raw → ┬→ agregar_kpis ───────┬→ validar_curated → generar_reporte
+                                  └→ consolidar_alertas ─┘
+```
+
+| Tarea | Qué hace | Si falla |
+|---|---|---|
+| `verificar_fuentes` | Kafka responde; raw y processed tienen archivos de la fecha; si es hoy, raw recibió datos en los últimos 10 min (`MAX_MINUTOS_SIN_DATOS`) | se reintenta 2 veces (30 s) |
+| `validar_raw` | offsets sin huecos ni repetidos por partición, ≤ 1 % de mensajes inválidos, desbalance entre particiones | falla sin reintentar |
+| `agregar_kpis` | indicadores por hora → `curated/resumen_horario/` | falla sin reintentar |
+| `consolidar_alertas` | A1 + A2 agrupadas por pedido → `curated/alertas_consolidadas/` | falla sin reintentar |
+| `validar_curated` | rangos de K1–K4, ventanas continuas, intentos de `kpis_1min` = processed, alertas con pedido real | falla sin reintentar |
+| `generar_reporte` | reúne los XCom de las 5 tareas y escribe el reporte Markdown + JSON | — |
+
+Ejecutar: en la interfaz, activar el DAG (interruptor) y pulsar **Trigger**; el parámetro `fecha` (AAAA-MM-DD,
+hora de Bogotá) es opcional (vacío = hoy). Por consola:
+
+```bash
+docker compose exec airflow-scheduler airflow dags unpause rapidgo_riesgo_transaccional
+docker compose exec airflow-scheduler airflow dags trigger rapidgo_riesgo_transaccional
+```
+
+**Mensajes dañados en raw.** raw no se borra; si `validar_raw` falla por mensajes inválidos y ya se revisó su
+origen, se ponen en cuarentena y se hace Clear de `validar_raw`:
+
+```bash
+docker compose exec airflow-scheduler python -m orquestacion.cuarentena --fecha AAAA-MM-DD --solo-mostrar
+docker compose exec airflow-scheduler python -m orquestacion.cuarentena --fecha AAAA-MM-DD --motivo "explicación"
+```
+
+Por qué unas fallas se reintentan y otras no, y los 3 fallos controlados (uno por integrante) con su recuperación:
+[ADR-003](docs/decisions/ADR-003-orquestacion-y-recuperacion.md) y [punto de control de la Semana 3](docs/checkpoints/semana3.md).
+
 ## Pruebas e integración continua
 ```bash
 pip install -r requirements.txt
@@ -111,8 +157,14 @@ python -m producer.productor_pagos --modo-seco --max-eventos 5   # productor sin
 ```
 
 El flujo [`.github/workflows/ci.yml`](.github/workflows/ci.yml) se ejecuta en cada push a `main`, en cada
-Pull Request y a mano (*Actions → CI RapidGo → Run workflow*): valida la sintaxis, ejecuta `pytest`, prueba el
-productor en modo seco y valida `docker-compose.yml`. `main` exige que pase antes de integrar.
+Pull Request y a mano (*Actions → CI RapidGo → Run workflow*) con dos trabajos en paralelo:
+
+- **`validar`**: sintaxis, `pytest` (contrato, reglas, productor, Spark y tareas de orquestación), productor en
+  modo seco y `docker compose config`.
+- **`validar-dag`**: instala Airflow 3.3.2 con sus restricciones oficiales, importa el DAG y comprueba sus
+  6 tareas, dependencias y reintentos (`tests/test_dag.py`).
+
+`main` exige que los dos pasen antes de integrar. Sin Airflow instalado, `tests/test_dag.py` aparece como *skipped*.
 
 ## Resultados (Semana 2)
 Ejecución local de 10 minutos a 10 eventos/s con la marca de agua de 2 minutos
@@ -130,6 +182,21 @@ Ejecución local de 10 minutos a 10 eventos/s con la marca de agua de 2 minutos
 Detalle y decisión en el [punto de control de la Semana 2](docs/checkpoints/semana2.md) y el
 [ADR-002](docs/decisions/ADR-002-marca-de-agua.md).
 
+## Resultados (Semana 3)
+Ejecución de referencia del DAG (`manual__evidencia_20261105T134958`, 2026-11-05): **verde en 23.7 s**.
+
+| Medida | Valor |
+|---|---|
+| Mensajes revisados en raw | 3950 (p0 1342 · p1 1264 · p2 1344), 0 huecos ni offsets repetidos |
+| Eventos en processed / pedidos | 4011 / 3268 |
+| Eventos de riesgo (K3) / tasa de rechazo (K4) | 200 (4.99 %) / 24.36 % |
+| Alertas A2 por intento → agrupadas por pedido | 200 → 90 (−55.0 %) |
+| Pedidos con alguna alerta / con A1 y A2 / ALTA | 105 / 10 / 10 |
+
+Fallos controlados: con Spark detenido `verificar_fuentes` falló en sus 3 intentos y la ejecución volvió a verde en
+13 min sin perder mensajes; con 600 mensajes dañados `validar_raw` falló sin reintentar y, tras la cuarentena,
+pasó con 0.0 % inválidos. Ver el [punto de control de la Semana 3](docs/checkpoints/semana3.md).
+
 ## Plan de versiones
 | Versión | Semana | Contenido |
 |---|---|---|
@@ -141,8 +208,8 @@ Detalle y decisión en el [punto de control de la Semana 2](docs/checkpoints/sem
 ## Documentación
 - Indicadores y alertas: [`docs/kpis_y_alertas.md`](docs/kpis_y_alertas.md)
 - Data Lake: [`datalake/README.md`](datalake/README.md)
-- Registros de decisiones de arquitectura: [ADR-001](docs/decisions/ADR-001-topic-clave-particiones.md) · [ADR-002](docs/decisions/ADR-002-marca-de-agua.md)
-- Puntos de control semanales: [Semana 1](docs/checkpoints/semana1.md) · [Semana 2](docs/checkpoints/semana2.md)
+- Registros de decisiones de arquitectura: [ADR-001](docs/decisions/ADR-001-topic-clave-particiones.md) · [ADR-002](docs/decisions/ADR-002-marca-de-agua.md) · [ADR-003](docs/decisions/ADR-003-orquestacion-y-recuperacion.md)
+- Puntos de control semanales: [Semana 1](docs/checkpoints/semana1.md) · [Semana 2](docs/checkpoints/semana2.md) · [Semana 3](docs/checkpoints/semana3.md)
 
 ## Contribuciones (Semana 1)
 | Integrante | Trabajo realizado | Pull Requests propios | Revisiones aprobadas |
@@ -157,5 +224,12 @@ Detalle y decisión en el [punto de control de la Semana 2](docs/checkpoints/sem
 | Esteban Rueda | Integración continua `ci.yml`, dependencias y configuración de pytest (#11), productor de intentos de pago (#8) | #30, #31 | #36 |
 | Oscar Becerra | Spark Structured Streaming raw/processed, Dockerfile y servicios de Docker Compose (#9), protección de `main` con el CI, ADR-002, punto de control y versión (#12) | #32, #35, #36 | #30, #31, #33, #34 |
 | Karol Perez | Indicadores K1–K4 y alertas A1/A2 en Spark (#10), pruebas de reglas y script de métricas (#11) | #33, #34 | #32, #35 |
+
+## Contribuciones (Semana 3)
+| Integrante | Trabajo realizado | Pull Requests propios | Revisiones aprobadas |
+|---|---|---|---|
+| Esteban Rueda | Lectura del Data Lake, `verificar_fuentes` y `validar_raw` (#13); DAG con reintentos y XCom y reporte (#13); fallo controlado 1 | #38, #40, #42 | #37, #39, #41 |
+| Oscar Becerra | Indicadores por hora, alertas consolidadas por pedido y `validar_curated` (#13); fallo controlado 2; ADR-003, punto de control y versión (#16) | #39, #43, #45 | #38, #40, #42, #44 |
+| Karol Perez | Airflow y PostgreSQL en Docker Compose (#15); CI con importación del DAG (#14); fallo controlado 3 y cuarentena | #37, #41, #44 | #38, #43 |
 
 _Se actualizará cada semana. Enlace al video final: pendiente (Semana 4)._
