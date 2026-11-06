@@ -10,3 +10,10 @@ Capturas y salidas reales del equipo que respaldan los puntos de control y los A
 | `semana2_metricas_antes.md` | 2 | Medición con la marca de agua de 10 minutos | `scripts/metricas_semana2.py` (copiar de `datalake/_metricas/`) |
 | `semana2_metricas_despues.md` | 2 | Medición después del ADR-002 | igual |
 | `semana2_actions.png` | 2 | Un Pull Request con el CI en verde | pestaña *Checks* del PR |
+| `semana3_airflow_inicio.png` | 3 | Interfaz de Airflow recién levantada | http://localhost:8081 |
+| `semana3_airflow_dag_grafo.png` | 3 | Vista *Graph* del DAG con las 6 tareas en verde | Airflow → DAG → ejecución → *Graph* |
+| `semana3_fallo1_kafka.md` + `semana3_fallo1_*.png` | 3 | Fallo controlado 1 (Esteban): Kafka detenido | ficha con horas, mensaje real y recuperación |
+| `semana3_fallo2_spark.md` + `semana3_fallo2_*.png` | 3 | Fallo controlado 2 (Oscar): Spark detenido | ídem |
+| `semana3_fallo3_calidad.md` + `semana3_fallo3_*.png` | 3 | Fallo controlado 3 (Karol): mensajes dañados y cuarentena | ídem |
+| `semana3_reporte.md` | 3 | Un reporte generado por el DAG | copiar de `datalake/curated/reportes/fecha=…/` |
+| `semana3_actions.png` | 3 | Un PR con los trabajos `validar` y `validar-dag` en verde | pestaña *Checks* del PR |
