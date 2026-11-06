@@ -69,7 +69,8 @@ def crear_lago(raiz: Path, *, offsets_con_hueco=False, mensajes_invalidos=0, sin
     if offsets_con_hueco:
         raw.loc[raw.index[-1], "offset"] += 5
     for k in range(mensajes_invalidos):
-        raw.loc[len(raw)] = {"clave": None, "particion": 0, "mensaje_json": "{no es json", "offset": int(raw["offset"].max()) + 1 + k}
+        siguiente = int(raw.loc[raw["particion"] == 0, "offset"].max()) + 1     # continúa la partición 0 sin huecos
+        raw.loc[len(raw)] = {"clave": None, "particion": 0, "mensaje_json": "{no es json", "offset": siguiente}
     _escribir_spark(raiz / "raw" / "pagos", raw, "part-00000", particion)
     # archivo de un lote que falló: está en la carpeta pero NO en _spark_metadata → no se debe leer
     raw.head(3).to_parquet(raiz / "raw" / "pagos" / particion / "part-huerfano.parquet", index=False)

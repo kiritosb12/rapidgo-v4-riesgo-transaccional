@@ -21,3 +21,5 @@ derby.log
 datalake/_metricas/
 # Airflow local del CI
 .airflow-ci/
+# Cuarentena de mensajes dañados (copiar a docs/evidencias si sirve como evidencia)
+datalake/_cuarentena/
