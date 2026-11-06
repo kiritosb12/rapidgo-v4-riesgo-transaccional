@@ -1,6 +1,10 @@
 """Tareas de control y calidad del Data Lake que orquesta Airflow (Semana 3).
 
-Dos tipos de error, porque se tratan distinto en el DAG:
+Python puro + pandas/pyarrow: no importan Airflow, así se prueban con pytest y el DAG
+(`airflow/dags/rapidgo_riesgo_transaccional.py`) solo las conecta. Cada tarea devuelve un diccionario
+pequeño que Airflow guarda como XCom; `generar_reporte` los recibe todos.
+
+Dos tipos de error, porque se tratan distinto en el DAG (ver ADR-003):
 - FalloFuente  → algo de infraestructura que puede arreglarse solo (Kafka caído, Spark aún no escribe):
                  Airflow REINTENTA la tarea.
 - FalloCalidad → los datos están mal; reintentar no cambia nada: la tarea falla de inmediato.
@@ -127,22 +131,45 @@ def verificar_fuentes(cfg: Config, fecha: str) -> dict:
 
 
 # ------------------------------------------------------------------ 2. validar_raw
+def es_mensaje_valido(texto) -> bool:
+    """JSON de un intento_pago de este equipo con id_evento."""
+    try:
+        evento = json.loads(texto)
+    except (TypeError, ValueError):
+        return False
+    return isinstance(evento, dict) and evento.get("equipo") == EQUIPO and bool(evento.get("id_evento"))
+
+
+def ruta_cuarentena(cfg: Config) -> Path:
+    return cfg.tabla("_cuarentena", "raw_pagos.csv")
+
+
+def leer_cuarentena(cfg: Config) -> set[tuple[int, int]]:
+    """(partición, offset) de los mensajes de raw puestos en cuarentena (ver orquestacion/cuarentena.py)."""
+    ruta = ruta_cuarentena(cfg)
+    if not ruta.exists():
+        return set()
+    df = pd.read_csv(ruta)
+    return set(zip(df["particion"].astype(int), df["offset"].astype(int)))
+
+
 def validar_raw(cfg: Config, fecha: str) -> dict:
-    """Calidad de lo que llegó de Kafka: completitud de offsets, JSON válido y reparto por partición."""
+    """Calidad de lo que llegó de Kafka: completitud de offsets, JSON válido y reparto por partición.
+
+    Los mensajes en cuarentena (datalake/_cuarentena/raw_pagos.csv) no cuentan como inválidos: raw no se
+    borra nunca, se aíslan los mensajes dañados ya revisados.
+    """
     raw = lago.leer(cfg.tabla("raw", "pagos"), fecha, ["mensaje_json", "particion", "offset"])
-    total = len(raw)
-    if total == 0:
+    if raw.empty:
         raise FalloCalidad(f"validar_raw — la capa raw está vacía para fecha={fecha}")
+    cuarentena = leer_cuarentena(cfg)
+    aislados = pd.Series([(int(p), int(o)) in cuarentena for p, o in zip(raw["particion"], raw["offset"])], index=raw.index)
+    en_cuarentena = int(aislados.sum())
+    total = len(raw)
 
-    def es_valido(texto) -> bool:
-        try:
-            evento = json.loads(texto)
-        except (TypeError, ValueError):
-            return False
-        return isinstance(evento, dict) and evento.get("equipo") == EQUIPO and bool(evento.get("id_evento"))
-
-    validos = raw["mensaje_json"].map(es_valido)
-    invalidos = int((~validos).sum())
+    validos = raw["mensaje_json"].map(es_mensaje_valido)
+    revisar = ~validos & ~aislados
+    invalidos = int(revisar.sum())
     ids = raw.loc[validos, "mensaje_json"].map(lambda t: json.loads(t)["id_evento"])
     duplicados = int(ids.duplicated().sum())
 
@@ -152,17 +179,19 @@ def validar_raw(cfg: Config, fecha: str) -> dict:
     promedio = total / max(len(por_part), 1)
     desbalance = round(float((por_part["count"] - promedio).abs().max() / promedio * 100), 1)
     pct_invalidos = round(100 * invalidos / total, 2)
+    ejemplos = ", ".join(f"p{p}:{o}" for p, o in raw.loc[revisar, ["particion", "offset"]].head(3).itertuples(index=False))
 
     chequeos = [
         _chequeo("offsets sin huecos por partición", huecos == 0, huecos, "0"),
         _chequeo("offsets sin repetir", offsets_repetidos == 0, offsets_repetidos, "0"),
         _chequeo("% mensajes inválidos o de otro equipo", pct_invalidos <= cfg.max_pct_invalidos,
-                 f"{pct_invalidos} %", f"<= {cfg.max_pct_invalidos} %"),
+                 f"{pct_invalidos} % ({invalidos} de {total}" + (f"; p.ej. {ejemplos})" if ejemplos else ")"),
+                 f"<= {cfg.max_pct_invalidos} %"),
         _chequeo("desbalance entre particiones", desbalance <= cfg.max_desbalance_pct, f"{desbalance} %",
                  f"<= {cfg.max_desbalance_pct} %", "advertencia"),
     ]
     advertencias = _evaluar("validar_raw", chequeos)
-    return {"mensajes": total, "invalidos": invalidos, "duplicados_id_evento": duplicados,
+    return {"mensajes": total, "invalidos": invalidos, "en_cuarentena": en_cuarentena, "duplicados_id_evento": duplicados,
             "por_particion": {str(p): int(n) for p, n in por_part["count"].items()},
             "desbalance_pct": desbalance, "chequeos": chequeos, "advertencias": advertencias}
 
@@ -377,6 +406,7 @@ def generar_reporte(cfg: Config, fecha: str, resultados: dict, ejecucion: str = 
             ("Mensajes en raw", raw["mensajes"]),
             ("Mensajes por partición", ", ".join(f"p{p}: {n}" for p, n in raw["por_particion"].items())),
             ("Duplicados (mismo id_evento) en raw", raw["duplicados_id_evento"]),
+            ("Mensajes en cuarentena (dañados ya revisados)", raw.get("en_cuarentena", 0)),
             ("Eventos en processed", kpis["eventos"]),
             ("Pedidos", kpis["pedidos"]),
             ("Valor promedio (COP)", f"{kpis['valor_promedio']:,.0f}".replace(",", ".")),
