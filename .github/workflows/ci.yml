@@ -1,8 +1,9 @@
 # Integración continua — RapidGo V4 (Riesgo transaccional)
-# Se ejecuta en cada push a main/develop, en cada Pull Request hacia main y a mano (workflow_dispatch).
-# Dos trabajos en paralelo:
-#   validar      → sintaxis, pruebas (contrato, reglas, productor, Spark, orquestación), productor y compose
-#   validar-dag  → instala Airflow 3.3.2 e importa el DAG (Semana 3)
+# Se ejecuta en cada push a main/develop, en cada Pull Request hacia main, a mano (workflow_dispatch) y desde
+# release.yml antes de publicar una versión (workflow_call).
+#   validar       → sintaxis, pruebas (contrato, reglas, productor, Spark, orquestación), productor y compose
+#   validar-dag   → instala Airflow 3.3.2 e importa el DAG (Semana 3)
+#   quality-gate  → solo pasa si los dos anteriores pasaron; main lo exige para integrar (Semana 4)
 name: CI RapidGo
 
 on:
@@ -11,6 +12,7 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  workflow_call:          # Semana 4: release.yml ejecuta este mismo CI antes de publicar
 
 jobs:
   validar:
@@ -71,3 +73,24 @@ jobs:
 
       - name: Importar el DAG y probar su estructura y sus tareas
         run: pytest -v tests/test_dag.py tests/test_orquestacion_fuentes.py tests/test_orquestacion_calidad.py
+
+  quality-gate:
+    needs: [validar, validar-dag]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decidir si se puede liberar
+        run: |
+          echo "validar: ${{ needs.validar.result }} · validar-dag: ${{ needs.validar-dag.result }}"
+          {
+            echo "## Quality gate RapidGo V4"
+            echo "| Trabajo | Resultado |"
+            echo "|---|---|"
+            echo "| validar | ${{ needs.validar.result }} |"
+            echo "| validar-dag | ${{ needs.validar-dag.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.validar.result }}" != "success" ] || [ "${{ needs.validar-dag.result }}" != "success" ]; then
+            echo "::error::Quality gate en rojo: no se libera"
+            exit 1
+          fi
+          echo "Quality gate en verde" >> "$GITHUB_STEP_SUMMARY"
