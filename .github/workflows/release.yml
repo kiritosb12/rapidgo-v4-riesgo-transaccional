@@ -1,0 +1,60 @@
+# Release — RapidGo V4 (Riesgo transaccional)
+# Al subir una etiqueta vX.Y.Z: vuelve a correr TODO el CI (quality gate), construye las imágenes de Docker,
+# empaqueta el código y publica el GitHub Release con las notas de docs/release-notes/<etiqueta>.md.
+# Si cualquier paso falla, no se publica nada.
+name: Release RapidGo
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Etiqueta que ya existe (por ejemplo v1.0.0)'
+        required: true
+permissions:
+  contents: write
+jobs:
+  calidad:
+    uses: ./.github/workflows/ci.yml
+  empaquetar-y-publicar:
+    needs: calidad
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout de la etiqueta
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - name: Comprobar que existen las notas de la versión
+        run: |
+          test -f "docs/release-notes/${TAG}.md" || { echo "::error::Falta docs/release-notes/${TAG}.md"; exit 1; }
+          if grep -n '⟨' "docs/release-notes/${TAG}.md"; then
+            echo "::error::Las notas de la versión todavía tienen huecos ⟨ ⟩ sin llenar"
+            exit 1
+          fi
+      - name: Construir las imágenes de Docker (Spark y Airflow)
+        run: docker compose build spark airflow-init
+      - name: Empaquetar el código de la versión
+        run: |
+          git archive --format=zip --prefix="rapidgo-v4-${TAG}/" -o "rapidgo-v4-${TAG}.zip" "${TAG}"
+          sha256sum "rapidgo-v4-${TAG}.zip" > "rapidgo-v4-${TAG}.zip.sha256"
+          ls -lh rapidgo-v4-*
+      - name: Guardar el paquete como artefacto de la ejecución
+        uses: actions/upload-artifact@v7
+        with:
+          name: rapidgo-v4-${{ env.TAG }}
+          path: rapidgo-v4-${{ env.TAG }}.zip*
+      - name: Publicar el GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${TAG}" > /dev/null 2>&1; then
+            gh release upload "${TAG}" rapidgo-v4-"${TAG}".zip* --clobber
+          else
+            gh release create "${TAG}" rapidgo-v4-"${TAG}".zip* --verify-tag \
+              --title "${TAG} – RapidGo V4 Riesgo transaccional (versión final)" \
+              --notes-file "docs/release-notes/${TAG}.md"
+          fi
