@@ -81,6 +81,14 @@ docker compose logs kafka-init        # debe mostrar PartitionCount: 3
 docker compose logs -f spark          # lotes de cada consulta (la 1.ª vez descarga el conector de Kafka)
 ```
 
+Prueba completa de punta a punta: levanta todo, espera datos en el lago, ejecuta el DAG y termina con error si algo
+no queda en verde ([`scripts/prueba_e2e.sh`](scripts/prueba_e2e.sh); en Windows, desde Git Bash):
+
+```bash
+bash scripts/prueba_e2e.sh --limpio   # prueba completa desde cero (≈ 5 min)
+bash scripts/prueba_e2e.sh            # usa lo que ya esté corriendo
+```
+
 | Servicio | Qué hace | Acceso |
 |---|---|---|
 | `kafka` / `kafka-init` | Broker KRaft y creación del topic con 3 particiones | `localhost:29092` |
