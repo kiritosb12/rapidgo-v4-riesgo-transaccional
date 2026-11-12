@@ -13,6 +13,9 @@ Proyecto final — Línea de Profundización I (Big Data) · Ingeniería de Sist
 | **Versión actual** | `v0.3.0-orchestration` (Semana 3 · Airflow, calidad y resiliencia) |
 | **Tablero Kanban** | [RapidGo V4 – Kanban](https://github.com/users/kiritosb12/projects/2) (20 Issues, Semanas 1 a 4) |
 
+## Video
+▶️ [Video final del proyecto (8:21 min)](https://www.youtube.com/watch?v=KqqaC_MNZF4) — problema, arquitectura, demostración, GitHub, resultados y aprendizajes.
+
 ## Problema de negocio
 En una plataforma de domicilios, los pagos fallidos repetidos, los valores fuera de lo normal y las combinaciones
 de señales sospechosas (IP extranjera, muchos reintentos, horario inusual) suelen indicar **prueba de tarjetas
@@ -79,6 +82,14 @@ cd rapidgo-v4-riesgo-transaccional
 docker compose up -d --build          # Kafka + topic + Kafka UI + Spark + productor + PostgreSQL + Airflow
 docker compose logs kafka-init        # debe mostrar PartitionCount: 3
 docker compose logs -f spark          # lotes de cada consulta (la 1.ª vez descarga el conector de Kafka)
+```
+
+Prueba completa de punta a punta: levanta todo, espera datos en el lago, ejecuta el DAG y termina con error si algo
+no queda en verde ([`scripts/prueba_e2e.sh`](scripts/prueba_e2e.sh); en Windows, desde Git Bash):
+
+```bash
+bash scripts/prueba_e2e.sh --limpio   # prueba completa desde cero (≈ 5 min)
+bash scripts/prueba_e2e.sh            # usa lo que ya esté corriendo
 ```
 
 | Servicio | Qué hace | Acceso |
@@ -232,4 +243,4 @@ pasó con 0.0 % inválidos. Ver el [punto de control de la Semana 3](docs/checkp
 | Oscar Becerra | Indicadores por hora, alertas consolidadas por pedido y `validar_curated` (#13); fallo controlado 2; ADR-003, punto de control y versión (#16) | #39, #43, #45 | #38, #40, #42, #44 |
 | Karol Perez | Airflow y PostgreSQL en Docker Compose (#15); CI con importación del DAG (#14); fallo controlado 3 y cuarentena | #37, #41, #44 | #38, #43 |
 
-_Se actualizará cada semana. Enlace al video final: pendiente (Semana 4)._
+Video final: [ver en YouTube](https://www.youtube.com/watch?v=KqqaC_MNZF4) (8:21 min).
