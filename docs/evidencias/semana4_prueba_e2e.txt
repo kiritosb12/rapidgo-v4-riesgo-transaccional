@@ -1,0 +1,245 @@
+
+[0 s] Borrando contenedores, base de Airflow y datos del lago
+
+[1 s] Levantando servicios (la primera vez construye las imágenes)
+ Image rapidgo-v4-airflow Building 
+ Image rapidgo-v4-airflow Building 
+ Image rapidgo-v4-airflow Building 
+ Image rapidgo-v4-airflow Building 
+ Image rapidgo-v4-app Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 2.92kB 0.1s done
+#1 DONE 0.1s
+
+#2 [airflow-scheduler internal] load build definition from Dockerfile
+#2 transferring dockerfile: 526B 0.0s done
+#2 DONE 0.1s
+
+#3 [spark internal] load build definition from Dockerfile
+#3 transferring dockerfile: 612B 0.0s done
+#3 DONE 0.1s
+
+#4 [airflow-apiserver internal] load metadata for docker.io/apache/airflow:3.3.2-python3.12
+#4 ...
+
+#5 [spark internal] load metadata for docker.io/library/python:3.12-slim-bookworm
+#5 DONE 0.7s
+
+#4 [airflow-apiserver internal] load metadata for docker.io/apache/airflow:3.3.2-python3.12
+#4 DONE 0.7s
+
+#6 [spark internal] load .dockerignore
+#6 transferring context: 107B 0.0s done
+#6 DONE 0.0s
+
+#7 [airflow-dag-processor internal] load .dockerignore
+#7 transferring context: 2B done
+#7 DONE 0.0s
+
+#8 [spark internal] load build context
+#8 transferring context: 788B 0.0s done
+#8 DONE 0.0s
+
+#9 [airflow-dag-processor 1/2] FROM docker.io/apache/airflow:3.3.2-python3.12@sha256:9df9c8be4096b9cc626bd7cb1f2b8c712eef66c59c615f8c7e6200871ca10bd1
+#9 resolve docker.io/apache/airflow:3.3.2-python3.12@sha256:9df9c8be4096b9cc626bd7cb1f2b8c712eef66c59c615f8c7e6200871ca10bd1
+#9 resolve docker.io/apache/airflow:3.3.2-python3.12@sha256:9df9c8be4096b9cc626bd7cb1f2b8c712eef66c59c615f8c7e6200871ca10bd1 0.1s done
+#9 DONE 0.1s
+
+#10 [spark 1/9] FROM docker.io/library/python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
+#10 resolve docker.io/library/python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df 0.1s done
+#10 DONE 0.1s
+
+#11 [spark 2/9] RUN apt-get update  && apt-get install -y --no-install-recommends openjdk-17-jre-headless procps  && rm -rf /var/lib/apt/lists/*
+#11 CACHED
+
+#12 [spark 4/9] COPY requirements.txt .
+#12 CACHED
+
+#13 [spark 5/9] RUN pip install --no-cache-dir -r requirements.txt
+#13 CACHED
+
+#14 [spark 7/9] COPY spark/ spark/
+#14 CACHED
+
+#15 [spark 8/9] COPY samples/ samples/
+#15 CACHED
+
+#16 [spark 3/9] WORKDIR /app
+#16 CACHED
+
+#17 [spark 6/9] COPY producer/ producer/
+#17 CACHED
+
+#18 [spark 9/9] COPY scripts/ scripts/
+#18 CACHED
+
+#19 [airflow-apiserver 2/2] RUN pip install --no-cache-dir "apache-airflow==3.3.2" pyarrow pandas tzdata     --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt"
+#19 CACHED
+
+#20 [airflow-init] exporting to image
+#20 exporting layers 0.0s done
+#20 exporting manifest sha256:bfaa4ca6d081ced5de02ba94b516bf7af2babf9ebd297e5a603a4f85c23ee313 0.0s done
+#20 exporting config sha256:eb7900c57432e1051f1daa0c9e28ff3e9b3b3b4b376f002b98189c0a2ca19b76
+#20 exporting config sha256:eb7900c57432e1051f1daa0c9e28ff3e9b3b3b4b376f002b98189c0a2ca19b76 0.0s done
+#20 exporting attestation manifest sha256:c637dd125724389158c8a7571d73d7bc10ef2f7c53ba6bd995084824ccbfe3dd
+#20 exporting attestation manifest sha256:c637dd125724389158c8a7571d73d7bc10ef2f7c53ba6bd995084824ccbfe3dd 0.1s done
+#20 exporting manifest list sha256:720dda8909b9a0094c29fe0a3ba69afd2ba8745101b2a09d4bb3fb2ac9513bab
+#20 exporting manifest list sha256:720dda8909b9a0094c29fe0a3ba69afd2ba8745101b2a09d4bb3fb2ac9513bab 0.1s done
+#20 naming to docker.io/library/rapidgo-v4-airflow:latest 0.0s done
+#20 unpacking to docker.io/library/rapidgo-v4-airflow:latest
+#20 unpacking to docker.io/library/rapidgo-v4-airflow:latest 0.1s done
+#20 DONE 0.5s
+
+#21 [spark] exporting to image
+#21 exporting layers 0.0s done
+#21 exporting manifest sha256:6d0733cc4554493b3ed4b295b0d5cfe2e02a8cc08a06bde1f86f356b3e8f2d71 done
+#21 exporting config sha256:00f3e639d2972483f0fc16ab8cbf9ce9e902c1b9721e5c560eacd89c15eea791 done
+#21 exporting attestation manifest sha256:8b6206cdc5a408ff6032663ad254f21a641ac26174e3efc6d1912d6c2dfe3d89 0.1s done
+#21 exporting manifest list sha256:d8679c0618ef8e53239f9e6b40699a66b3fa7555899fbb1c0cfb249822278803 0.1s done
+#21 naming to docker.io/library/rapidgo-v4-app:latest 0.0s done
+#21 unpacking to docker.io/library/rapidgo-v4-app:latest 0.1s done
+#21 DONE 0.5s
+
+#22 [airflow-apiserver] exporting to image
+#22 exporting layers 0.0s done
+#22 exporting manifest sha256:59fd78f3c5df242bc27611c8ef03e799215edff5e0481f009e26906fc06d671f 0.0s done
+#22 exporting config sha256:5835dc6f6e5a65989db821adf63605d3f5fdbad4389703781ea48dbe6aa1110a 0.1s done
+#22 exporting attestation manifest sha256:eeb39a6869a0ee5e999388eb3cdf8061d7df16475e1ca614d9acb4b14b55d57c 0.1s done
+#22 exporting manifest list sha256:96a9f7cc3f47ddb0711f109ed839e63de584f9cd51d829a8140daf99c74aa765 0.1s done
+#22 naming to docker.io/library/rapidgo-v4-airflow:latest 0.0s done
+#22 unpacking to docker.io/library/rapidgo-v4-airflow:latest 0.1s done
+#22 ...
+
+#23 [airflow-scheduler] exporting to image
+#23 exporting layers 0.0s done
+#23 exporting manifest sha256:20126cd313885ae6d8585920405976182446d08f64180cac2ef59443519252cc 0.0s done
+#23 exporting config sha256:1847d9febfbf15cde7f9361fed356d8b1ad418d4e8c1432624c1e70bc89ed69d 0.1s done
+#23 exporting attestation manifest sha256:da30f0e5cfced98e99aa6b2d5053a35da9f2e5ae86c07ee9209a1ac97286b87e 0.1s done
+#23 exporting manifest list sha256:2e433fbc8c9ac857268dc71aad476318c56a6570a08fa0be842e747b65d586c8 0.1s done
+#23 naming to docker.io/library/rapidgo-v4-airflow:latest 0.0s done
+#23 unpacking to docker.io/library/rapidgo-v4-airflow:latest 0.1s done
+#23 DONE 0.6s
+
+#24 [airflow-dag-processor] exporting to image
+#24 exporting layers 0.0s done
+#24 exporting manifest sha256:5f7c6e12b7bc16a342cdde9fc464db5216a79f8a76b0d7809c094b650705246e 0.0s done
+#24 exporting config sha256:385712a598123210009fc41326697e3d45603fce02962c1c09d1837099d53270 0.0s done
+#24 exporting attestation manifest sha256:329d03c58cd880eedc6e8f2e7b1274c687a2e8c2c90cb05a5d6395a91e81a3ca 0.1s done
+#24 exporting manifest list sha256:5b5507fdb22ea09e396cce79bec093a3d627d09f04263e2cc9048c8f5fdbebbd 0.1s done
+#24 naming to docker.io/library/rapidgo-v4-airflow:latest 0.0s done
+#24 unpacking to docker.io/library/rapidgo-v4-airflow:latest 0.1s done
+#24 DONE 0.6s
+
+#22 [airflow-apiserver] exporting to image
+#22 DONE 0.7s
+
+#25 [airflow-init] resolving provenance for metadata file
+#25 DONE 0.4s
+
+#26 [airflow-scheduler] resolving provenance for metadata file
+#26 DONE 0.2s
+
+#27 [airflow-dag-processor] resolving provenance for metadata file
+#27 DONE 0.1s
+
+#28 [airflow-apiserver] resolving provenance for metadata file
+#28 DONE 0.0s
+
+#29 [spark] resolving provenance for metadata file
+#29 DONE 0.3s
+ Image rapidgo-v4-airflow Built 
+ Image rapidgo-v4-airflow Built 
+ Image rapidgo-v4-app Built 
+ Image rapidgo-v4-airflow Built 
+ Image rapidgo-v4-airflow Built 
+ Volume rapidgo-v4_spark-ivy Creating 
+ Volume rapidgo-v4_airflow-postgres Creating 
+ Volume rapidgo-v4_airflow-postgres Creating 
+ Volume rapidgo-v4_spark-ivy Creating 
+ Network rapidgo-v4_default Creating 
+ Network rapidgo-v4_default Creating 
+ Volume rapidgo-v4_airflow-postgres Created 
+ Volume rapidgo-v4_airflow-postgres Created 
+ Volume rapidgo-v4_spark-ivy Created 
+ Volume rapidgo-v4_spark-ivy Created 
+ Network rapidgo-v4_default Created 
+ Network rapidgo-v4_default Created 
+ Container rg4-postgres Creating 
+ Container rg4-kafka Creating 
+ Container rg4-kafka Created 
+ Container rg4-kafka-init Creating 
+ Container rg4-kafka-ui Creating 
+ Container rg4-postgres Created 
+ Container rg4-airflow-init Creating 
+ Container rg4-kafka-ui Created 
+ Container rg4-kafka-init Created 
+ Container rg4-spark Creating 
+ Container rg4-airflow-init Created 
+ Container rg4-airflow-dag-processor Creating 
+ Container rg4-airflow-scheduler Creating 
+ Container rg4-airflow-apiserver Creating 
+ Container rg4-spark Created 
+ Container rg4-productor Creating 
+ Container rg4-airflow-apiserver Created 
+ Container rg4-airflow-scheduler Created 
+ Container rg4-airflow-dag-processor Created 
+ Container rg4-productor Created 
+ Container rg4-postgres Starting 
+ Container rg4-kafka Starting 
+ Container rg4-postgres Started 
+ Container rg4-postgres Waiting 
+ Container rg4-kafka Started 
+ Container rg4-kafka Waiting 
+ Container rg4-kafka Waiting 
+ Container rg4-postgres Healthy 
+ Container rg4-airflow-init Starting 
+ Container rg4-airflow-init Started 
+ Container rg4-airflow-init Waiting 
+ Container rg4-postgres Waiting 
+ Container rg4-postgres Waiting 
+ Container rg4-airflow-init Waiting 
+ Container rg4-postgres Waiting 
+ Container rg4-airflow-init Waiting 
+ Container rg4-postgres Healthy 
+ Container rg4-postgres Healthy 
+ Container rg4-postgres Healthy 
+ Container rg4-kafka Healthy 
+ Container rg4-kafka-init Starting 
+ Container rg4-kafka Healthy 
+ Container rg4-kafka-ui Starting 
+ Container rg4-kafka-init Started 
+ Container rg4-kafka-init Waiting 
+ Container rg4-kafka-ui Started 
+ Container rg4-kafka-init Exited 
+ Container rg4-spark Starting 
+ Container rg4-spark Started 
+ Container rg4-kafka-init Waiting 
+ Container rg4-kafka-init Exited 
+ Container rg4-productor Starting 
+ Container rg4-productor Started 
+ Container rg4-airflow-init Exited 
+ Container rg4-airflow-dag-processor Starting 
+ Container rg4-airflow-init Exited 
+ Container rg4-airflow-apiserver Starting 
+ Container rg4-airflow-init Exited 
+ Container rg4-airflow-scheduler Starting 
+ Container rg4-airflow-dag-processor Started 
+ Container rg4-airflow-apiserver Started 
+ Container rg4-airflow-scheduler Started 
+NAME                        IMAGE                           COMMAND                  SERVICE                 CREATED              STATUS                    PORTS
+rg4-airflow-apiserver       rapidgo-v4-airflow              "/usr/bin/dumb-init …"   airflow-apiserver       About a minute ago   Up 3 seconds              0.0.0.0:8081->8080/tcp, [::]:8081->8080/tcp
+rg4-airflow-dag-processor   rapidgo-v4-airflow              "/usr/bin/dumb-init …"   airflow-dag-processor   About a minute ago   Up 4 seconds              8080/tcp
+rg4-airflow-scheduler       rapidgo-v4-airflow              "/usr/bin/dumb-init …"   airflow-scheduler       About a minute ago   Up 2 seconds              8080/tcp
+rg4-kafka                   apache/kafka:3.8.0              "/__cacert_entrypoin…"   kafka                   About a minute ago   Up 57 seconds (healthy)   0.0.0.0:29092->29092/tcp, [::]:29092->29092/tcp
+rg4-kafka-ui                provectuslabs/kafka-ui:latest   "/bin/sh -c 'java --…"   kafka-ui                About a minute ago   Up 43 seconds             0.0.0.0:18080->8080/tcp, [::]:18080->8080/tcp
+rg4-postgres                postgres:16-alpine              "docker-entrypoint.s…"   postgres                About a minute ago   Up 57 seconds (healthy)   5432/tcp
+rg4-productor               rapidgo-v4-app                  "python -m producer.…"   productor               59 seconds ago       Up 30 seconds             
+rg4-spark                   rapidgo-v4-app                  "python -m spark.str…"   spark                   About a minute ago   Up 31 seconds             0.0.0.0:4040->4040/tcp, [::]:4040->4040/tcp
+
+[67 s] Esperando datos en processed (máx. 5 min)
+processed tiene 3 archivos
+
+[20742 s] Esperando 3 min para que cierren las primeras ventanas (marca de agua de 2 min)
+
+[20923 s] Activando y ejecutando el DAG
+request returned 500 Internal Server Error for API route and version http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/v1.55/exec/cbdce7bee4d8d26891c34d2f701e4601248a05f1f39c3996e3bad76d148f4faf/json, check if the server supports the requested API version
