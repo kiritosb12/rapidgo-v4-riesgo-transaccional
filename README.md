@@ -195,16 +195,16 @@ correr todo el CI, construye las imágenes de Docker, empaqueta el código y pub
 las notas de `docs/release-notes/`. Si algo falla, no se libera.
 
 ## Resultados
-Ejecución final desde cero (`scripts/prueba_e2e.sh --limpio`, ⟨fecha⟩, ⟨N⟩ min a 10 eventos/s):
+Ejecución final desde cero (`scripts/prueba_e2e.sh --limpio`, 2026-11-13, 19 min de datos a 10 eventos/s; verde en 4 min 49 s):
 
 | Medida | Valor |
 |---|---|
-| Mensajes y reparto por partición | ⟨N⟩ · ⟨__ / __ / __ %⟩ · 0 huecos de offsets |
-| Duplicados eliminados por Spark | ⟨N⟩ (⟨__ %⟩) |
-| Retraso evento → processed (p95) | ⟨__ s⟩ |
-| Eventos de riesgo (K3) | ⟨N⟩ (⟨__ %⟩) |
-| Alertas A1 / A2 por intento / pedidos con A2 | ⟨N⟩ / ⟨N⟩ / ⟨N⟩ (−⟨__ %⟩ al agrupar) |
-| DAG en verde | ⟨__ s⟩, 13 chequeos de calidad |
+| Mensajes y reparto por partición | 10 841 · 33.1 / 33.4 / 33.5 % · 0 huecos de offsets |
+| Duplicados eliminados por Spark | 106 (1.0 %) |
+| Retraso evento → processed (p95) | 12.0 s |
+| Eventos de riesgo (K3) | 534 (4.97 %) |
+| Alertas A1 / A2 por intento / pedidos con A2 | 290 / 541 / 240 (−55.6 % al agrupar) |
+| DAG en verde | ≈ 68 s, 13 chequeos de calidad |
 | Fallos controlados recuperados | 3 (Kafka, Spark, mensajes dañados) — ver [ADR-003](docs/decisions/ADR-003-orquestacion-y-recuperacion.md) |
 
 Evidencias: [reporte final](docs/evidencias/semana4_reporte_final.md) · [prueba de punta a punta](docs/evidencias/semana4_prueba_e2e.txt) ·
