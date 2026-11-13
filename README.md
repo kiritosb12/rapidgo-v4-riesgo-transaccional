@@ -10,7 +10,7 @@ Proyecto final — Línea de Profundización I (Big Data) · Ingeniería de Sist
 | **Equipo** | 9 |
 | **Integrantes** | Esteban Rueda ([@jers120506-gif](https://github.com/jers120506-gif)) · Oscar Becerra ([@kiritosb12](https://github.com/kiritosb12)) · Karol Perez ([@Karitoperez](https://github.com/Karitoperez)) |
 | **Variante** | 4 — Riesgo transaccional |
-| **Versión actual** | `v0.3.0-orchestration` (Semana 3 · Airflow, calidad y resiliencia) |
+| **Versión actual** | `v1.0.0` (versión final · integración, quality gate y video) — [notas](docs/release-notes/v1.0.0.md) |
 | **Tablero Kanban** | [RapidGo V4 – Kanban](https://github.com/users/kiritosb12/projects/2) (20 Issues, Semanas 1 a 4) |
 
 ## Video
@@ -34,8 +34,21 @@ con trazabilidad completa en un Data Lake por capas (raw → processed → curat
 | Kafka (modo KRaft) | Transporta los eventos en el topic `rapidgo.v4.pagos.intentos` (clave `id_pedido`, 3 particiones) |
 | Spark Structured Streaming | Lee, limpia, calcula señales y puntaje de riesgo, indicadores por ventana y alertas |
 | Data Lake (Parquet) | Capas raw → processed → curated (ver [datalake/README.md](datalake/README.md)) |
-| Airflow | Valida la calidad, agrega, genera el reporte; reintentos y fallo controlado (Semana 3) |
-| Docker, GitHub y GitHub Actions | Ejecución local, trazabilidad, integración continua y versiones |
+| Airflow | Valida la calidad de raw y curated, resume por hora, agrupa las alertas por pedido y genera el reporte; reintentos y cuarentena |
+| Docker, GitHub y GitHub Actions | Ejecución local, trazabilidad, integración continua, quality gate y versiones |
+
+## Tecnologías utilizadas
+| Tecnología | Versión | Rol en la solución |
+|---|---|---|
+| Python | 3.12 (Docker) / 3.13 (CI) | Productor, tareas de Airflow, pruebas |
+| confluent-kafka | 2.16.0 | Cliente del productor: clave `id_pedido`, `acks=all`, idempotencia |
+| Apache Kafka (KRaft) + Kafka UI | 3.8.0 | Transporte de eventos; topic con 3 particiones |
+| PySpark (Structured Streaming) | 4.1.3 | Limpieza, señales de riesgo, indicadores por ventana y alertas |
+| Parquet + pyarrow/pandas | — | Formato del Data Lake; lectura desde Airflow |
+| Apache Airflow + PostgreSQL | 3.3.2 / 16 | Orquestación: DAG de calidad, alertas consolidadas y reporte |
+| Docker Compose | — | Ejecución local de todos los servicios |
+| pytest | 8 | Pruebas de contrato, reglas, productor, Spark, orquestación y DAG |
+| GitHub (Projects, Issues, PR, Actions, Releases) | — | Trazabilidad, CI, quality gate y versiones |
 
 ## Contrato del evento
 Evento `intento_pago` — esquema en [`samples/evento_pago.schema.json`](samples/evento_pago.schema.json);
@@ -57,8 +70,9 @@ ejemplos en [`samples/evento_pago.json`](samples/evento_pago.json) (normal) y
 
 Justificación en el [ADR-001](docs/decisions/ADR-001-topic-clave-particiones.md).
 
-## Indicadores y alertas (umbrales iniciales)
-Detalle completo en [docs/kpis_y_alertas.md](docs/kpis_y_alertas.md).
+## Indicadores y alertas
+Detalle completo en [docs/kpis_y_alertas.md](docs/kpis_y_alertas.md). Spark los calcula en ventanas de 1 minuto con
+marca de agua de 2 minutos ([ADR-002](docs/decisions/ADR-002-marca-de-agua.md)); Airflow los resume por hora y agrupa las alertas por pedido.
 
 | Indicador | Definición |
 |---|---|
@@ -116,7 +130,7 @@ docker compose stop productor spark                                 # detener (e
 docker compose down                                                 # apagar todo
 ```
 
-## Airflow: control de calidad y reporte (Semana 3)
+## Airflow: control de calidad y reporte
 `docker compose up -d --build` también levanta PostgreSQL y Airflow 3.3.2 (api-server, scheduler y dag-processor).
 La primera vez tarda unos minutos en construir la imagen.
 
@@ -168,45 +182,50 @@ python -m producer.productor_pagos --modo-seco --max-eventos 5   # productor sin
 ```
 
 El flujo [`.github/workflows/ci.yml`](.github/workflows/ci.yml) se ejecuta en cada push a `main`, en cada
-Pull Request y a mano (*Actions → CI RapidGo → Run workflow*) con dos trabajos en paralelo:
+Pull Request y a mano (*Actions → CI RapidGo → Run workflow*) con tres trabajos:
 
 - **`validar`**: sintaxis, `pytest` (contrato, reglas, productor, Spark y tareas de orquestación), productor en
   modo seco y `docker compose config`.
 - **`validar-dag`**: instala Airflow 3.3.2 con sus restricciones oficiales, importa el DAG y comprueba sus
   6 tareas, dependencias y reintentos (`tests/test_dag.py`).
 
-`main` exige que los dos pasen antes de integrar. Sin Airflow instalado, `tests/test_dag.py` aparece como *skipped*.
+- **`quality-gate`**: solo pasa si `validar` y `validar-dag` pasaron. `main` lo exige para integrar.
 
-## Resultados (Semana 2)
-Ejecución local de 10 minutos a 10 eventos/s con la marca de agua de 2 minutos
-([`docs/evidencias/semana2_metricas_despues.md`](docs/evidencias/semana2_metricas_despues.md)):
+Sin Airflow instalado, `tests/test_dag.py` aparece como *skipped* en el computador; en el CI corren todas.
 
-| Medida | Valor |
-|---|---|
-| Mensajes por partición | 6038 en total: 32,5 % / 34,3 % / 33,1 % |
-| Primera ventana de indicadores escrita | a los 3,2 min (antes, con 10 min de marca de agua: 10,4 min) |
-| Demora entre el cierre de la ventana y su escritura | 140 s (antes: 620 s) |
-| Eventos de riesgo (puntaje ≥ 60) | 331 (5,52 %) |
-| Alertas por minuto | A1: 13,7 · A2: 33,1 |
-| Eventos descartados por llegar tarde | 0 |
+**Versiones:** al subir una etiqueta `vX.Y.Z`, [`release.yml`](.github/workflows/release.yml) vuelve a
+correr todo el CI, construye las imágenes de Docker, empaqueta el código y publica el GitHub Release con
+las notas de `docs/release-notes/`. Si algo falla, no se libera.
 
-Detalle y decisión en el [punto de control de la Semana 2](docs/checkpoints/semana2.md) y el
-[ADR-002](docs/decisions/ADR-002-marca-de-agua.md).
-
-## Resultados (Semana 3)
-Ejecución de referencia del DAG (`manual__evidencia_20261105T134958`, 2026-11-05): **verde en 23.7 s**.
+## Resultados
+Ejecución final desde cero (`scripts/prueba_e2e.sh --limpio`, ⟨fecha⟩, ⟨N⟩ min a 10 eventos/s):
 
 | Medida | Valor |
 |---|---|
-| Mensajes revisados en raw | 3950 (p0 1342 · p1 1264 · p2 1344), 0 huecos ni offsets repetidos |
-| Eventos en processed / pedidos | 4011 / 3268 |
-| Eventos de riesgo (K3) / tasa de rechazo (K4) | 200 (4.99 %) / 24.36 % |
-| Alertas A2 por intento → agrupadas por pedido | 200 → 90 (−55.0 %) |
-| Pedidos con alguna alerta / con A1 y A2 / ALTA | 105 / 10 / 10 |
+| Mensajes y reparto por partición | ⟨N⟩ · ⟨__ / __ / __ %⟩ · 0 huecos de offsets |
+| Duplicados eliminados por Spark | ⟨N⟩ (⟨__ %⟩) |
+| Retraso evento → processed (p95) | ⟨__ s⟩ |
+| Eventos de riesgo (K3) | ⟨N⟩ (⟨__ %⟩) |
+| Alertas A1 / A2 por intento / pedidos con A2 | ⟨N⟩ / ⟨N⟩ / ⟨N⟩ (−⟨__ %⟩ al agrupar) |
+| DAG en verde | ⟨__ s⟩, 13 chequeos de calidad |
+| Fallos controlados recuperados | 3 (Kafka, Spark, mensajes dañados) — ver [ADR-003](docs/decisions/ADR-003-orquestacion-y-recuperacion.md) |
 
-Fallos controlados: con Spark detenido `verificar_fuentes` falló en sus 3 intentos y la ejecución volvió a verde en
-13 min sin perder mensajes; con 600 mensajes dañados `validar_raw` falló sin reintentar y, tras la cuarentena,
-pasó con 0.0 % inválidos. Ver el [punto de control de la Semana 3](docs/checkpoints/semana3.md).
+Evidencias: [reporte final](docs/evidencias/semana4_reporte_final.md) · [prueba de punta a punta](docs/evidencias/semana4_prueba_e2e.txt) ·
+[métricas](docs/evidencias/semana4_metricas_final.md) · puntos de control de las semanas [1](docs/checkpoints/semana1.md),
+[2](docs/checkpoints/semana2.md) y [3](docs/checkpoints/semana3.md).
+
+## Limitaciones conocidas y trabajo futuro
+| Limitación | Trabajo futuro |
+|---|---|
+| Datos simulados por el productor (5 % de anomalías fijado por nosotros) | Probar con datos reales o anonimizados |
+| Un solo broker de Kafka (factor de replicación 1): si cae, el flujo se detiene | 3 brokers con replicación 3 |
+| Spark en modo local dentro de un contenedor | Clúster (Spark standalone o Kubernetes) |
+| A1 usa ventanas fijas de 5 min: una ráfaga que cruza el borde se parte en dos | Ventanas deslizantes o agrupación por sesión |
+| Reglas con umbrales fijos, no aprenden | Modelo de detección de anomalías entrenado con el histórico |
+| Muchos archivos Parquet pequeños (un lote cada 10 s) | Tarea de compactación en el DAG |
+| Las alertas quedan en el lago; nadie recibe un aviso | Notificación por correo o Slack desde Airflow |
+| Airflow sin usuarios (solo uso local) y revisión cada hora | Usuarios y roles; revisión más frecuente |
+| La cuarentena se registra a mano | Detección automática con aprobación del equipo |
 
 ## Plan de versiones
 | Versión | Semana | Contenido |
@@ -214,33 +233,43 @@ pasó con 0.0 % inválidos. Ver el [punto de control de la Semana 3](docs/checkp
 | `v0.1.0-foundation` | 1 | Arquitectura, contrato, indicadores y alertas, Kanban, ADR-001 |
 | `v0.2.0-streaming` | 2 | Productor + Kafka + Spark + Data Lake + integración continua |
 | `v0.3.0-orchestration` | 3 | DAG de Airflow, calidad, fallo controlado, integración continua ampliada |
-| `v1.0.0` | 4 | Control de calidad final, README final, video |
+| `v1.0.0` | 4 | Prueba de punta a punta, quality gate, release automático, README final y video |
+
+Todas las versiones: [Releases](https://github.com/kiritosb12/rapidgo-v4-riesgo-transaccional/releases).
 
 ## Documentación
 - Indicadores y alertas: [`docs/kpis_y_alertas.md`](docs/kpis_y_alertas.md)
 - Data Lake: [`datalake/README.md`](datalake/README.md)
 - Registros de decisiones de arquitectura: [ADR-001](docs/decisions/ADR-001-topic-clave-particiones.md) · [ADR-002](docs/decisions/ADR-002-marca-de-agua.md) · [ADR-003](docs/decisions/ADR-003-orquestacion-y-recuperacion.md)
+- Notas de la versión final: [`docs/release-notes/v1.0.0.md`](docs/release-notes/v1.0.0.md)
 - Puntos de control semanales: [Semana 1](docs/checkpoints/semana1.md) · [Semana 2](docs/checkpoints/semana2.md) · [Semana 3](docs/checkpoints/semana3.md)
 
-## Contribuciones (Semana 1)
+## Contribuciones
+| Integrante | Responsabilidades | Issues | PR principales | Revisiones |
+|---|---|---|---|---|
+| Esteban Rueda | Indicadores y umbrales, contrato JSON y ADR-001; productor; `ci.yml`; lectura del lago, `validar_raw`, DAG y reporte; fallo 1; prueba de punta a punta; video | #2 #3 #4 #8 #11 #13 #16 #17 #20 | #23 #24 #26 #30 #31 #38 #40 #42 #47 #50 | #22 #25 #27 #36 #37 #39 #41 #45 #46 #49 |
+| Oscar Becerra | Estructura, docker-compose inicial, arquitectura y README; Spark y Data Lake; ADR-002; indicadores por hora, alertas consolidadas y `validar_curated`; fallo 2; ADR-003; quality gate y release | #1 #2 #5 #6 #7 #9 #12 #13 #16 #18 | #22 #25 #27 #28 #29 #32 #35 #36 #39 #43 #45 #46 | #23 #24 #26 #30 #31 #33 #34 #38 #40 #42 #44 #50 |
+| Karol Perez | Indicadores K1–K4 y alertas en Spark; pruebas de reglas y script de métricas; Airflow y PostgreSQL en Compose; CI con el DAG; fallo 3 y cuarentena; README final | #10 #11 #14 #15 #16 #19 | #33 #34 #37 #41 #44 #49 | #32 #35 #38 #43 #47 |
+
+Detalle por semana:
+
+### Contribuciones (Semana 1)
 | Integrante | Trabajo realizado | Pull Requests propios | Revisiones aprobadas |
 |---|---|---|---|
 | Esteban Rueda | Indicadores y reglas de alerta (#3), topic, clave, particiones y ADR-001 (#4), contrato JSON y ejemplos (#2) | #23, #24, #26 | #22, #25, #27 |
 | Oscar Becerra | Estructura del repositorio (#1), docker-compose preliminar (#6), arquitectura y README (#5), corrección del esquema y prueba del contrato (#2), punto de control y versión (#7) | #22, #25, #27, #28, #29 | #23, #24, #26 |
 | Karol Perez | — | — | — |
 
-## Contribuciones (Semana 2)
+### Contribuciones (Semana 2)
 | Integrante | Trabajo realizado | Pull Requests propios | Revisiones aprobadas |
 |---|---|---|---|
 | Esteban Rueda | Integración continua `ci.yml`, dependencias y configuración de pytest (#11), productor de intentos de pago (#8) | #30, #31 | #36 |
 | Oscar Becerra | Spark Structured Streaming raw/processed, Dockerfile y servicios de Docker Compose (#9), protección de `main` con el CI, ADR-002, punto de control y versión (#12) | #32, #35, #36 | #30, #31, #33, #34 |
 | Karol Perez | Indicadores K1–K4 y alertas A1/A2 en Spark (#10), pruebas de reglas y script de métricas (#11) | #33, #34 | #32, #35 |
 
-## Contribuciones (Semana 3)
+### Contribuciones (Semana 3)
 | Integrante | Trabajo realizado | Pull Requests propios | Revisiones aprobadas |
 |---|---|---|---|
 | Esteban Rueda | Lectura del Data Lake, `verificar_fuentes` y `validar_raw` (#13); DAG con reintentos y XCom y reporte (#13); fallo controlado 1 | #38, #40, #42 | #37, #39, #41 |
 | Oscar Becerra | Indicadores por hora, alertas consolidadas por pedido y `validar_curated` (#13); fallo controlado 2; ADR-003, punto de control y versión (#16) | #39, #43, #45 | #38, #40, #42, #44 |
 | Karol Perez | Airflow y PostgreSQL en Docker Compose (#15); CI con importación del DAG (#14); fallo controlado 3 y cuarentena | #37, #41, #44 | #38, #43 |
-
-Video final: [ver en YouTube](https://www.youtube.com/watch?v=KqqaC_MNZF4) (8:21 min).

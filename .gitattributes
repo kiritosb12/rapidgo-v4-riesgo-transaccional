@@ -1,0 +1,2 @@
+# Los scripts de bash deben quedar con finales de línea LF también en Windows
+*.sh text eol=lf
