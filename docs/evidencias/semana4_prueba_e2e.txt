@@ -1,0 +1,194 @@
+# Prueba de punta a punta — Semana 4 (2026-11-13, hora de Bogotá)
+# 1) Desde cero en un clon nuevo de main: bash scripts/prueba_e2e.sh --limpio
+
+inicio 2026-11-13 08:26:00
+
+[0 s] Borrando contenedores, base de Airflow y datos del lago
+
+[2 s] Levantando servicios (la primera vez construye las imágenes)
+ Image rapidgo-v4-airflow Building
+ Image rapidgo-v4-airflow Building
+ Image rapidgo-v4-airflow Building
+ Image rapidgo-v4-airflow Building
+ Image rapidgo-v4-app Building
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Image rapidgo-v4-airflow Built
+ Image rapidgo-v4-airflow Built
+ Image rapidgo-v4-airflow Built
+ Image rapidgo-v4-airflow Built
+ Image rapidgo-v4-app Built
+NAME                        IMAGE                           COMMAND                  SERVICE                 CREATED          STATUS                    PORTS
+rg4-airflow-apiserver       rapidgo-v4-airflow              "/usr/bin/dumb-init …"   airflow-apiserver       25 seconds ago   Up 1 second               0.0.0.0:8081->8080/tcp, [::]:8081->8080/tcp
+rg4-airflow-dag-processor   rapidgo-v4-airflow              "/usr/bin/dumb-init …"   airflow-dag-processor   25 seconds ago   Up 1 second               8080/tcp
+rg4-airflow-scheduler       rapidgo-v4-airflow              "/usr/bin/dumb-init …"   airflow-scheduler       25 seconds ago   Up 1 second               8080/tcp
+rg4-kafka                   apache/kafka:3.8.0              "/__cacert_entrypoin…"   kafka                   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:29092->29092/tcp, [::]:29092->29092/tcp
+rg4-kafka-ui                provectuslabs/kafka-ui:latest   "/bin/sh -c 'java --…"   kafka-ui                25 seconds ago   Up 12 seconds             0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+rg4-postgres                postgres:16-alpine              "docker-entrypoint.s…"   postgres                25 seconds ago   Up 25 seconds (healthy)   5432/tcp
+rg4-productor               rapidgo-v4-app                  "python -m producer.…"   productor               25 seconds ago   Up 7 seconds
+rg4-spark                   rapidgo-v4-app                  "python -m spark.str…"   spark                   25 seconds ago   Up 7 seconds              0.0.0.0:4040->4040/tcp, [::]:4040->4040/tcp
+
+[32 s] Esperando datos en processed (máx. 5 min)
+processed tiene 3 archivos
+
+[68 s] Esperando 3 min para que cierren las primeras ventanas (marca de agua de 2 min)
+
+[248 s] Activando y ejecutando el DAG
+Ejecución: manual__2026-11-13T13:30:16.276511+00:00
+   verificar_fuentes success
+   validar_raw success
+   agregar_kpis success
+   consolidar_alertas success
+   validar_curated success
+   generar_reporte success
+
+[289 s] OK: flujo completo en verde. Reporte: datalake/curated/reportes/fecha=2026-11-13/reporte_083042.md
+# Reporte de riesgo transaccional — 2026-11-13
+Generado 2026-11-13 08:30 (hora de Bogotá) · ejecución `manual__2026-11-13T13:30:16.276511+00:00` · equipo equipo9-v4
+
+## Resumen
+| Medida | Valor |
+|---|---|
+| Mensajes en raw | 2370 |
+| Mensajes por partición | p0: 770, p1: 837, p2: 763 |
+| Duplicados (mismo id_evento) en raw | 25 |
+| Mensajes en cuarentena (dañados ya revisados) | 0 |
+| Eventos en processed | 2445 |
+| Pedidos | 2013 |
+| Valor promedio (COP) | 119.362 |
+| Eventos de riesgo (K3) | 126 (5.15 %) |
+| Tasa de rechazo (K4) | 24.21 % |
+| Alertas A1 MULTIPLES_INTENTOS | 0 |
+| Alertas A2 SENALES_COMBINADAS (por intento) | 126 |
+| Pedidos con A2 (agrupadas por pedido) | 53 (−57.9 %) |
+| Pedidos con alguna alerta / con A1 y A2 / ALTA | 53 / 0 / 6 |
+| Ventanas de 1 minuto revisadas | 2 |
+
+## Indicadores por hora (hora de Bogotá)
+| Hora | Intentos | Pedidos | K1 | Valor prom. | K3 % | K4 % |
+|---|---|---|---|---|---|---|
+| 08:00 | 2445 | 2013 | 1.215 | 119.362 | 5.15 | 24.21 |
+exit=0
+
+# 2) Después de 10 minutos más de datos, segunda ejecución del DAG: bash scripts/prueba_e2e.sh
+
+inicio 2026-11-13 08:40:49
+
+[0 s] Levantando servicios (la primera vez construye las imágenes)
+ Image rapidgo-v4-airflow Building
+ Image rapidgo-v4-airflow Building
+ Image rapidgo-v4-airflow Building
+ Image rapidgo-v4-app Building
+ Image rapidgo-v4-airflow Building
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Image rapidgo-v4-app Built
+ Image rapidgo-v4-airflow Built
+ Image rapidgo-v4-airflow Built
+ Image rapidgo-v4-airflow Built
+ Image rapidgo-v4-airflow Built
+NAME                        IMAGE                                                                     COMMAND                  SERVICE                 CREATED          STATUS                    PORTS
+rg4-airflow-apiserver       rapidgo-v4-airflow                                                        "/usr/bin/dumb-init …"   airflow-apiserver       17 seconds ago   Up 1 second               0.0.0.0:8081->8080/tcp, [::]:8081->8080/tcp
+rg4-airflow-dag-processor   rapidgo-v4-airflow                                                        "/usr/bin/dumb-init …"   airflow-dag-processor   17 seconds ago   Up Less than a second     8080/tcp
+rg4-airflow-scheduler       rapidgo-v4-airflow                                                        "/usr/bin/dumb-init …"   airflow-scheduler       17 seconds ago   Up Less than a second     8080/tcp
+rg4-kafka                   apache/kafka:3.8.0                                                        "/__cacert_entrypoin…"   kafka                   15 minutes ago   Up 15 minutes (healthy)   0.0.0.0:29092->29092/tcp, [::]:29092->29092/tcp
+rg4-kafka-ui                provectuslabs/kafka-ui:latest                                             "/bin/sh -c 'java --…"   kafka-ui                15 minutes ago   Up 14 minutes             0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+rg4-postgres                postgres:16-alpine                                                        "docker-entrypoint.s…"   postgres                15 minutes ago   Up 15 minutes (healthy)   5432/tcp
+rg4-productor               sha256:903b3ef7e25aa9b551ad4f8875bf6b65737e07400a75e7f99e8d0a618f4ea207   "python -m producer.…"   productor               15 minutes ago   Up 14 minutes
+rg4-spark                   sha256:903b3ef7e25aa9b551ad4f8875bf6b65737e07400a75e7f99e8d0a618f4ea207   "python -m spark.str…"   spark                   15 minutes ago   Up 14 minutes             0.0.0.0:4040->4040/tcp, [::]:4040->4040/tcp
+
+[23 s] Esperando datos en processed (máx. 5 min)
+processed tiene 255 archivos
+
+[23 s] Esperando 3 min para que cierren las primeras ventanas (marca de agua de 2 min)
+
+[203 s] Activando y ejecutando el DAG
+Ejecución: manual__2026-11-13T13:44:19.546901+00:00
+   validar_raw success
+   agregar_kpis success
+   verificar_fuentes success
+   consolidar_alertas success
+   validar_curated success
+   generar_reporte success
+
+[271 s] OK: flujo completo en verde. Reporte: datalake/curated/reportes/fecha=2026-11-13/reporte_084506.md
+# Reporte de riesgo transaccional — 2026-11-13
+Generado 2026-11-13 08:45 (hora de Bogotá) · ejecución `manual__2026-11-13T13:44:19.546901+00:00` · equipo equipo9-v4
+
+## Resumen
+| Medida | Valor |
+|---|---|
+| Mensajes en raw | 10841 |
+| Mensajes por partición | p0: 3583, p1: 3623, p2: 3635 |
+| Duplicados (mismo id_evento) en raw | 106 |
+| Mensajes en cuarentena (dañados ya revisados) | 0 |
+| Eventos en processed | 10750 |
+| Pedidos | 8701 |
+| Valor promedio (COP) | 119.466 |
+| Eventos de riesgo (K3) | 534 (4.97 %) |
+| Tasa de rechazo (K4) | 23.94 % |
+| Alertas A1 MULTIPLES_INTENTOS | 290 |
+| Alertas A2 SENALES_COMBINADAS (por intento) | 541 |
+| Pedidos con A2 (agrupadas por pedido) | 240 (−55.6 %) |
+| Pedidos con alguna alerta / con A1 y A2 / ALTA | 387 / 138 / 120 |
+| Ventanas de 1 minuto revisadas | 16 |
+
+## Indicadores por hora (hora de Bogotá)
+| Hora | Intentos | Pedidos | K1 | Valor prom. | K3 % | K4 % |
+|---|---|---|---|---|---|---|
+| 08:00 | 10750 | 8701 | 1.235 | 119.466 | 4.97 | 23.94 |
+exit=0
