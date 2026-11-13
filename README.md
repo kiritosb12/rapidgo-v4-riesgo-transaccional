@@ -13,6 +13,9 @@ Proyecto final — Línea de Profundización I (Big Data) · Ingeniería de Sist
 | **Versión actual** | `v1.0.0` (versión final · integración, quality gate y video) — [notas](docs/release-notes/v1.0.0.md) |
 | **Tablero Kanban** | [RapidGo V4 – Kanban](https://github.com/users/kiritosb12/projects/2) (20 Issues, Semanas 1 a 4) |
 
+## Video
+▶️ [Video final del proyecto (8:21 min)](https://www.youtube.com/watch?v=KqqaC_MNZF4) — problema, arquitectura, demostración, GitHub, resultados y aprendizajes.
+
 ## Problema de negocio
 En una plataforma de domicilios, los pagos fallidos repetidos, los valores fuera de lo normal y las combinaciones
 de señales sospechosas (IP extranjera, muchos reintentos, horario inusual) suelen indicar **prueba de tarjetas
@@ -244,9 +247,9 @@ Todas las versiones: [Releases](https://github.com/kiritosb12/rapidgo-v4-riesgo-
 ## Contribuciones
 | Integrante | Responsabilidades | Issues | PR principales | Revisiones |
 |---|---|---|---|---|
-| Esteban Rueda | Indicadores y umbrales, contrato JSON y ADR-001; productor; `ci.yml`; lectura del lago, `validar_raw`, DAG y reporte; fallo 1; prueba de punta a punta; video | #2 #3 #4 #8 #11 #13 #16 #17 #20 | #23 #24 #26 #30 #31 #38 #40 #42 ⟨#N e2e⟩ ⟨#N video⟩ | #22 #25 #27 #36 #37 #39 #41 #45 #46 |
-| Oscar Becerra | Estructura, docker-compose inicial, arquitectura y README; Spark y Data Lake; ADR-002; indicadores por hora, alertas consolidadas y `validar_curated`; fallo 2; ADR-003; quality gate y release | #1 #2 #5 #6 #7 #9 #12 #13 #16 #18 | #22 #25 #27 #28 #29 #32 #35 #36 #39 #43 #45 #46 | #23 #24 #26 #30 #31 #33 #34 #38 #40 #42 #44 ⟨#N README⟩ ⟨#N video⟩ |
-| Karol Perez | Indicadores K1–K4 y alertas en Spark; pruebas de reglas y script de métricas; Airflow y PostgreSQL en Compose; CI con el DAG; fallo 3 y cuarentena; README final | #10 #11 #14 #15 #16 #19 | #33 #34 #37 #41 #44 ⟨#N README⟩ | #32 #35 #38 #43 ⟨#N e2e⟩ ⟨#N video⟩ |
+| Esteban Rueda | Indicadores y umbrales, contrato JSON y ADR-001; productor; `ci.yml`; lectura del lago, `validar_raw`, DAG y reporte; fallo 1; prueba de punta a punta; video | #2 #3 #4 #8 #11 #13 #16 #17 #20 | #23 #24 #26 #30 #31 #38 #40 #42 #47 #50 | #22 #25 #27 #36 #37 #39 #41 #45 #46 #49 |
+| Oscar Becerra | Estructura, docker-compose inicial, arquitectura y README; Spark y Data Lake; ADR-002; indicadores por hora, alertas consolidadas y `validar_curated`; fallo 2; ADR-003; quality gate y release | #1 #2 #5 #6 #7 #9 #12 #13 #16 #18 | #22 #25 #27 #28 #29 #32 #35 #36 #39 #43 #45 #46 | #23 #24 #26 #30 #31 #33 #34 #38 #40 #42 #44 #50 |
+| Karol Perez | Indicadores K1–K4 y alertas en Spark; pruebas de reglas y script de métricas; Airflow y PostgreSQL en Compose; CI con el DAG; fallo 3 y cuarentena; README final | #10 #11 #14 #15 #16 #19 | #33 #34 #37 #41 #44 #49 | #32 #35 #38 #43 #47 |
 
 Detalle por semana:
 
